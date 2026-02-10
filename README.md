@@ -1,128 +1,124 @@
-# skema-hackathon
-- Project for Skema's 2026 Hackathon
+🏭 Détection de Défauts Industriels – Projet Hackathon
+=====================================================
 
+Ce dépôt propose une petite pipeline **de bout en bout** pour la **détection de défauts industriels à partir d’images**, développée pour un hackathon. Il combine :
 
-🏭 Industrial Defect Detection – Hackathon Project
-=================================================
-
-This project is a small end‑to‑end pipeline for **industrial defect detection from images**, built for a hackathon. It combines:
-
-- Jupyter notebooks for **exploration, model training and saving**.
-- A **Streamlit web app** for interactive image upload and **defect / non‑defect classification**.
-- Support for both a custom **CNN baseline** and **pre‑trained CNN feature extractors** (ResNet, VGG, DenseNet, etc.) feeding shallow classifiers.
+- Des notebooks Jupyter pour **l’exploration, l’entraînement des modèles et la sauvegarde**.
+- Une **application Streamlit** pour téléverser des images et effectuer une **classification défaut / non‑défaut** de manière interactive.
+- La prise en charge à la fois d’un **CNN de base personnalisé** et de **réseaux CNN pré‑entraînés comme extracteurs de caractéristiques** (ResNet, VGG, DenseNet, etc.) couplés à des modèles classiques (SVM, Random Forest, XGBoost…).
 
 ---
 
-Check the [Streamlit app](https://skema-hackathon.streamlit.app) out
+👉 Vous pouvez tester l’application Streamlit ici : [Streamlit app](https://skema-hackathon.streamlit.app)
 
-Project Structure
------------------
+Structure du projet
+-------------------
 
 - `data/`
-	- `train/defective`, `train/non_defective`: training images.
-	- `test/defective`, `test/non_defective`: test images.
+	- `train/defective`, `train/non_defective` : images d’entraînement.
+	- `test/defective`, `test/non_defective` : images de test.
 - `models/`
-	- `baseline_cnn.pth`: example trained baseline CNN weights (if available).
-	- `*.pkl`, `*_scaler.pkl`: optional shallow models (SVM, RF, XGBoost, …) and associated scalers.
+	- `baseline_cnn.pth` : poids d’exemple du CNN de base (si disponibles).
+	- `*.pkl`, `*_scaler.pkl` : modèles classiques (SVM, Random Forest, XGBoost, …) et leurs scalers associés.
 - `streamlit_app.py`
-	- Main Streamlit app for **image classification** with ensemble voting.
-	- Handles image upload, preprocessing, prediction and visualizations.
+	- Application Streamlit principale pour la **classification d’images** avec vote d’ensemble.
+	- Gère le téléversement d’images, le pré‑traitement, la prédiction et les visualisations.
 - `01.1hackathon_notebook_template_jour1.ipynb`, `01.1hackathon_notebook_template_jour2.ipynb`
-	- Hackathon notebooks for **day‑by‑day experimentation, training and analysis**.
+	- Notebooks hackathon pour **l’expérimentation jour par jour, l’entraînement et l’analyse**.
 - `J2/`
-	- Additional notebooks and scripts, e.g. `train_and_save_models_jour2.py`, `train_models_v2.py` for training and exporting models used by the app.
+	- Notebooks et scripts supplémentaires, par ex. `train_and_save_models_jour2.py`, `train_models_v2.py` pour entraîner et exporter les modèles utilisés par l’app.
 - `misc/`
-	- Alternative / experimental utilities (e.g. `streamlit_app_bis.py`, `utils.py`).
+	- Utilitaires alternatifs / expérimentaux (par ex. `streamlit_app_bis.py`, `utils.py`).
 
 ---
 
-Main Components
----------------
+Composants principaux
+---------------------
 
-### 1. Baseline CNN
+### 1. CNN de base (BaselineCNN)
 
-Defined in `streamlit_app.py` as `BaselineCNN`, a simple convolutional neural network trained to classify images into:
+Défini dans `streamlit_app.py` sous le nom `BaselineCNN`, il s’agit d’un réseau de neurones convolutionnel simple, entraîné pour classer les images en deux classes :
 
-- **Class 0**: Non‑Defective
-- **Class 1**: Defective
+- **Classe 0** : Non‑défectueux
+- **Classe 1** : Défectueux
 
-The corresponding weights can be stored in `models/baseline_cnn.pth` and are loaded by the app if present.
+Les poids correspondants peuvent être enregistrés dans `models/baseline_cnn.pth` et sont chargés automatiquement par l’application s’ils existent.
 
-### 2. Feature Extractors + Shallow Models
+### 2. Extracteurs de caractéristiques + modèles classiques
 
-The app also uses a `FeatureExtractor` wrapper around **pre‑trained CNN backbones** from `torchvision` (e.g. ResNet50, VGG16, DenseNet121). These are used to extract fixed feature vectors, which are then fed into **shallow classifiers** such as:
+L’application utilise également un `FeatureExtractor` qui encapsule des **backbones CNN pré‑entraînés** de `torchvision` (par ex. ResNet50, VGG16, DenseNet121). Ils servent à extraire des vecteurs de caractéristiques fixes, ensuite transmis à des **classifieurs classiques** tels que :
 
 - SVM
 - Random Forest
 - XGBoost
 
-These shallow models, together with their scalers, are stored as `*.pkl` and `*_scaler.pkl` files in `models/`.
+Ces modèles, ainsi que leurs scalers, sont stockés sous forme de fichiers `*.pkl` et `*_scaler.pkl` dans le dossier `models/`.
 
-### 3. Ensemble Prediction
+### 3. Prédiction par ensemble (ensemble learning)
 
-The Streamlit app aggregates predictions from:
+L’application Streamlit agrège les prédictions de :
 
-- The baseline CNN.
-- All available shallow models.
+- Le CNN de base.
+- Tous les modèles classiques disponibles.
 
-It then applies **majority voting** to output a final decision (Defective / Non‑Defective) with an overall confidence estimate and per‑model details.
+Elle applique ensuite un **vote majoritaire** pour produire une décision finale (Défectueux / Non‑défectueux), accompagnée d’un niveau de confiance global et de détails par modèle.
 
-If no trained models are found, the app can fall back to a **demo mode** with dummy models so that the UI remains usable during development.
-
----
-
-Running the Streamlit App
--------------------------
-
-1. **Install dependencies**
-
-	 ```bash
-	 pip install -r requirements.txt
-	 ```
-
-2. **(Optional) Place trained models**
-
-	 - Put `baseline_cnn.pth` and any `*.pkl` / `*_scaler.pkl` files into the `models/` directory.
-
-3. **Launch the app**
-
-	 From the project root:
-
-	 ```bash
-	 streamlit run streamlit_app.py
-	 ```
-
-4. **Use the web interface**
-
-	 - Open the URL shown by Streamlit (usually `http://localhost:8501`).
-	 - In the sidebar, you can enable **Demo Mode** to use simulated predictions when no real models are available.
-	 - Upload an image of an industrial component.
-	 - Click **“Analyze Image”** to see:
-		 - Final decision (Defective / Non‑Defective) with global confidence.
-		 - Per‑model votes and confidences.
-		 - Visualizations such as confidence gauges and vote distributions.
+Si aucun modèle entraîné n’est trouvé, l’application peut basculer en **mode démo**, avec des modèles factices, afin que l’interface reste utilisable pendant le développement.
 
 ---
 
-Using the Notebooks
--------------------
+Lancer l’application Streamlit
+------------------------------
 
-The notebooks (`01.1hackathon_notebook_template_jour1.ipynb`, `01.1hackathon_notebook_template_jour2.ipynb` and those in `J2/`) are organized to guide you through:
+1. **Installer les dépendances**
 
-- Data exploration and basic preprocessing.
-- Training and evaluating baseline and advanced models.
-- Saving trained weights and classifiers into the `models/` folder for later use by the Streamlit app.
+	```bash
+	pip install -r requirements.txt
+	```
 
-You can open them in Jupyter, VS Code, or any compatible notebook environment and run the cells step‑by‑step.
+2. **(Optionnel) Ajouter des modèles entraînés**
+
+	- Placer `baseline_cnn.pth` et tout fichier `*.pkl` / `*_scaler.pkl` dans le dossier `models/`.
+
+3. **Lancer l’application**
+
+	Depuis la racine du projet :
+
+	```bash
+	streamlit run streamlit_app.py
+	```
+
+4. **Utiliser l’interface web**
+
+	- Ouvrir l’URL affichée par Streamlit (en général `http://localhost:8501`).
+	- Dans la barre latérale, activer **Demo Mode** pour utiliser des prédictions simulées si aucun modèle réel n’est disponible.
+	- Téléverser une image d’une pièce industrielle.
+	- Cliquer sur **« Analyze Image »** pour obtenir :
+		- La décision finale (Défectueux / Non‑défectueux) avec une confiance globale.
+		- Les votes et niveaux de confiance par modèle.
+		- Des visualisations comme un indicateur de confiance (jauge) et la répartition des votes.
 
 ---
 
-Goal of the Project
--------------------
+Utiliser les notebooks
+----------------------
 
-The primary goal is to provide a **clear, hackathon‑friendly template** for:
+Les notebooks (`01.1hackathon_notebook_template_jour1.ipynb`, `01.1hackathon_notebook_template_jour2.ipynb` et ceux dans `J2/`) sont organisés pour vous guider à travers :
 
-- Building and experimenting with **image‑based defect detection models**.
-- Quickly wrapping those models in a **user‑friendly Streamlit interface**.
-- Demonstrating how to combine **deep feature extractors** and **classical machine‑learning models** in an ensemble for robust predictions.
+- L’exploration des données et le pré‑traitement de base.
+- L’entraînement et l’évaluation de modèles de base et plus avancés.
+- La sauvegarde des poids et des classifieurs dans le dossier `models/` pour une utilisation ultérieure dans l’application Streamlit.
+
+Vous pouvez les ouvrir dans Jupyter, VS Code ou tout autre environnement compatible et exécuter les cellules pas à pas.
+
+---
+
+Objectif du projet
+------------------
+
+L’objectif principal est de fournir un **gabarit clair et adapté à un hackathon** pour :
+
+- Concevoir et expérimenter des **modèles de détection de défauts sur images**.
+- Mettre rapidement ces modèles à disposition via une **interface Streamlit conviviale**.
+- Illustrer comment combiner **extracteurs de caractéristiques profonds** et **modèles de machine learning classiques** au sein d’un ensemble pour des prédictions plus robustes.
 
