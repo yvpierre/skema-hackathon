@@ -24,9 +24,9 @@ Structure du projet
 	- Application Streamlit principale pour la **classification d’images** avec vote d’ensemble.
 	- Gère le téléversement d’images, le pré‑traitement, la prédiction et les visualisations.
 - `01.1hackathon_notebook_template_jour1.ipynb`, `01.1hackathon_notebook_template_jour2.ipynb`
-	- Notebooks hackathon pour **l’expérimentation jour par jour, l’entraînement et l’analyse**.
+	- Notebooks hackathon pour **le jour 1**.
 - `J2/`
-	- Notebooks et scripts supplémentaires, par ex. `train_and_save_models_jour2.py`, `train_models_v2.py` pour entraîner et exporter les modèles utilisés par l’app.
+	- Notebooks et scripts ** du jour 2 **.
 - `misc/`
 	- Utilitaires alternatifs / expérimentaux (par ex. `streamlit_app_bis.py`, `utils.py`).
 
