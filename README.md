@@ -8,8 +8,17 @@ Ce dépôt propose une petite pipeline **de bout en bout** pour la **détection 
 - La prise en charge à la fois d’un **CNN de base personnalisé** et de **réseaux CNN pré‑entraînés comme extracteurs de caractéristiques** (ResNet, VGG, DenseNet, etc.) couplés à des modèles classiques (SVM, Random Forest, XGBoost…).
 
 ---
+👉 Tester l’application Streamlit ici : [Streamlit app](https://skema-hackathon.streamlit.app)
 
-👉 Vous pouvez tester l’application Streamlit ici : [Streamlit app](https://skema-hackathon.streamlit.app)
+Objectif du projet
+------------------
+
+L’objectif principal est de fournir un **gabarit clair et adapté à un hackathon** pour :
+
+- Concevoir et expérimenter des **modèles de détection de défauts sur images**.
+- Mettre rapidement ces modèles à disposition via une **interface Streamlit conviviale**.
+- Illustrer comment combiner **extracteurs de caractéristiques profonds** et **modèles de machine learning classiques** au sein d’un ensemble pour des prédictions plus robustes.
+
 
 Structure du projet
 -------------------
@@ -26,7 +35,7 @@ Structure du projet
 - `01.1hackathon_notebook_template_jour1.ipynb`, `01.1hackathon_notebook_template_jour2.ipynb`
 	- Notebooks hackathon pour **le jour 1**.
 - `J2/`
-	- Notebooks et scripts ** du jour 2 **.
+	- Notebooks et scripts **du jour 2**.
 - `misc/`
 	- Utilitaires alternatifs / expérimentaux (par ex. `streamlit_app_bis.py`, `utils.py`).
 
@@ -113,12 +122,4 @@ Vous pouvez les ouvrir dans Jupyter, VS Code ou tout autre environnement compati
 
 ---
 
-Objectif du projet
-------------------
-
-L’objectif principal est de fournir un **gabarit clair et adapté à un hackathon** pour :
-
-- Concevoir et expérimenter des **modèles de détection de défauts sur images**.
-- Mettre rapidement ces modèles à disposition via une **interface Streamlit conviviale**.
-- Illustrer comment combiner **extracteurs de caractéristiques profonds** et **modèles de machine learning classiques** au sein d’un ensemble pour des prédictions plus robustes.
 
