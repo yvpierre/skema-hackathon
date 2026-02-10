@@ -566,7 +566,7 @@ def main():
         st.info(f"Device: {DEVICE}")
         
         st.markdown("---")
-        st.markdown("**Hackathon 2024** 🚀")
+        st.markdown("**Hackathon SKEMA 2026 -- Groupe 1 ** 🚀")
     
     # Load models
     with st.spinner("Loading models..."):
@@ -754,7 +754,7 @@ def main():
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; color: #999; font-size: 12px;">
-        🏭 Industrial Defect Detection System | Hackathon 2024 | 
+        🏭 Industrial Defect Detection System | Hackathon SKEMA 2026 -- Groupe 1 | 
         Ensemble: CNN + ResNet50 + VGG16 + DenseNet121
     </div>
     """, unsafe_allow_html=True)
