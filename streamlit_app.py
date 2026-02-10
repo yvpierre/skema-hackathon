@@ -20,6 +20,13 @@ st.set_page_config(
 st.markdown(
     """
     <style>
+    /* Dégradé bleu-vert pour le titre principal uniquement */
+    .title-gradient {
+        background: -webkit-linear-gradient(45deg, #00ffcc, #00aaff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
     /* Fond général */
     .stApp {
         background-color: #0e1117;
@@ -27,10 +34,10 @@ st.markdown(
     }
     
     /* Titres avec dégradé bleu/vert */
-    h1, h2, h3, h4, h5, h6 {
-        background: -webkit-linear-gradient(45deg, #00ffcc, #00aaff);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+    h2, h3, h4, h5, h6 {
+    background: -webkit-linear-gradient(45deg, #00ffcc, #00aaff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
     }
 
     /* Sidebar foncé */
@@ -69,7 +76,7 @@ st.markdown(
 # -------------------
 # Titre & description
 # -------------------
-st.title("🔍 Détection de pièce défectueuse")
+st.markdown('<h1 class="title-gradient">🔍 Détection de pièce défectueuse</h1>', unsafe_allow_html=True)
 st.write(
     """
     Bienvenue dans l'application de détection de défauts de pièces de turbines.  
@@ -91,48 +98,60 @@ if uploaded_file is not None:
     # Affichage de l'image uploadée
     st.image(image, caption="Image uploadée", use_column_width=True)
 
-    # -------------------
-    # Bouton "Analyser"
-    # -------------------
-    if st.button("Analyser l'image"):
-        with st.spinner("Analyse en cours..."):
-            time.sleep(2)  # effet visuel
-            
-            # Résultat mock
-            prediction = random.choice(["✅ Pièce OK", "❌ Pièce défectueuse"])
-            confidence = random.uniform(70, 99)
+# -------------------
+# Bouton "Analyser"
+# -------------------
+st.markdown(
+    """
+    <style>
+    /* Bouton analyser custom */
+    div.stButton > button:first-child {
+        background-color: #00aaff;
+        color: white;
+        font-size: 18px;
+        font-weight: bold;
+        padding: 0.5em 1.5em;
+        border-radius: 8px;
+        border: none;
+        transition: background-color 0.3s;
+    }
+    div.stButton > button:first-child:hover {
+        background-color: #0088cc;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+if st.button("Analyser l'image"):
+    with st.spinner("Analyse en cours..."):
+        time.sleep(2)  # effet visuel
+        
+        # Résultat mock
+        prediction = random.choice(["✅ Pièce OK", "❌ Pièce défectueuse"])
+        confidence = random.uniform(70, 99)
 
-        # ---- PAGE DE RESULTAT ----
-        st.markdown("## Résultat de l'analyse")
-    
-        # Image principale
-        st.image(image, caption="Image uploadée", use_column_width=True)
-    
-        # Résultat et confiance
-        if "Défectueuse" in prediction:
-            st.error(f"{prediction} (Confiance : {confidence:.2f}%)")
-        else:
-            st.success(f"{prediction} (Confiance : {confidence:.2f}%)")
+    # Affichage résultat : Verdict très visible
+    if "défectueuse" in prediction.lower():
+        verdict_text = "❌ Pièce défectueuse"
+        verdict_color = "#ff5555"  # rouge
+    else:
+        verdict_text = "✅ Pièce OK"
+        verdict_color = "#55ff55"  # vert
 
-        st.markdown("---")
-        st.markdown("### Exemples de défauts similaires :")
+    # ici on force la couleur avec style inline
+    st.markdown(f"<h1 style='color:{verdict_color};'>{verdict_text}</h1>", unsafe_allow_html=True)
 
-        # --- Images similaires (mock) ---
-        # tu peux remplacer les chemins par tes vraies images de défaut
-        similar_images = [
-            "examples/defect1.jpg",
-            "examples/defect2.jpg",
-            "examples/defect3.jpg"
-        ]
+    # Slider confiance stylé en HTML/CSS
+    confidence_value = int(confidence)  # valeur simulée
+    st.markdown("<h3 style='color:white;'>Confiance du résultat</h3>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style='background-color:#333333; width:100%; height:20px; border-radius:10px;'>
+        <div style='background: linear-gradient(to right, white {confidence_value}%, #555555 {confidence_value}%); height:20px; border-radius:10px;'>
+        </div>
+    </div>
+    <p style='color:white;'>{confidence_value}%</p>
+    """, unsafe_allow_html=True)          
 
-        cols = st.columns(len(similar_images))
-        for col, img_path in zip(cols, similar_images):
-            try:
-                sim_img = Image.open(img_path).convert("RGB")
-                col.image(sim_img, width=150)
-            except:
-                col.write("Image manquante")
-                
 # -------------------
 # Sidebar design
 # -------------------
