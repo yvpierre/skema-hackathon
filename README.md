@@ -76,7 +76,7 @@ Si aucun modèle entraîné n’est trouvé, l’application peut basculer en **
 
 ---
 
-Lancer l’application Streamlit
+Lancer l’application Streamlit en local
 ------------------------------
 
 1. **Installer les dépendances**
