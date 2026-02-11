@@ -15,7 +15,7 @@ Usage:
     python train_models_v2.py
 
     # Ou avec options
-    python train_models_v2.py --data_dir ./data --output_dir ./models --epochs 15
+    python train_models_v2.py --data_dir ./data --output_dir ./models --epochs 20
 
 """
 
@@ -211,7 +211,7 @@ def get_transforms():
 # ============================================
 # TRAINING FUNCTIONS
 # ============================================
-def train_cnn(model, train_loader, val_loader, epochs=10, lr=0.001):
+def train_cnn(model, train_loader, val_loader, epochs=20, lr=0.001):
     print(f"\n🧠 Training CNN ({epochs} epochs)...")
     
     model = model.to(DEVICE)
@@ -340,7 +340,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default='./data')
     parser.add_argument('--output_dir', type=str, default='./models')
-    parser.add_argument('--epochs', type=int, default=10)
+    parser.add_argument('--epochs', type=int, default=20)
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--skip_cnn', action='store_true')
     args = parser.parse_args()

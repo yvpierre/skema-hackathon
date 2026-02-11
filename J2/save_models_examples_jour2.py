@@ -293,9 +293,9 @@ Scalers (REQUIRED for shallow classifiers):
 Final directory structure:
     models/
     ├── baseline_cnn.pth
+    ├── resnet50_scaler.pkl
     ├── resnet50_svm.pkl
     ├── resnet50_xgboost.pkl
-    ├── resnet50_scaler.pkl
     ├── vgg16_randomforest.pkl
     ├── vgg16_scaler.pkl
     ├── densenet121_svm.pkl
