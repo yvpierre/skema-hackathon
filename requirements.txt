@@ -1,3 +1,5 @@
+torch==2.10.0
+torchvision==0.25.0
 accelerate==1.12.0
 albucore==0.0.24
 albumentations==2.0.8

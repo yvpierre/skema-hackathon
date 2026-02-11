@@ -1,15 +1,14 @@
 """
-🏭 Application Complète - Prédiction + CBIR
-============================================
-Application Streamlit pour:
-1. Prédiction de défauts avec vote majoritaire (CNN + Shallow classifiers)
-2. Recherche d'images similaires (CBIR)
+🏭 Industrial Defect Detection - Streamlit App
+===============================================
+Simple app for image upload, feature extraction, and ensemble prediction.
+No CBIR, No VLM - Just pure classification with majority voting.
 
 Usage:
-    streamlit run streamlit_app_complete.py
+    streamlit run streamlit_prediction_app.py
 
-Prérequis:
-    pip install streamlit torch torchvision scikit-learn pillow plotly pandas scipy
+Requirements:
+    pip install streamlit torch torchvision scikit-learn pillow plotly pandas
 """
 
 import streamlit as st
@@ -22,43 +21,32 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
-import pickle
 import joblib
-from scipy.spatial.distance import cdist
+from io import BytesIO
 import time
 
-
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║                           CONFIGURATION                                       ║
-# ║                    Modifiez ces chemins selon votre structure                ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
-
-# Dossier contenant les modèles de classification (.pth, .pkl)
-MODELS_DIR = Path("./models")
-
-# Dossier contenant les signatures CBIR (.pkl)
-SIGNATURES_DIR = Path("./signatures")
-
-# Classes
-CLASSES = ['non_defective', 'defective']
-
-# Paramètres
-IMG_SIZE = 224
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║                           PAGE CONFIG                                         ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
+# ============================================
+# CONFIGURATION
+# ============================================
 
 st.set_page_config(
-    page_title="🏭 Détection de Défauts + CBIR",
+    page_title="🏭 Détection de Défauts",
     page_icon="🔍",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# CSS personnalisé
+# Device configuration
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+IMG_SIZE = 224
+
+# Paths - Adjust these to your model locations
+MODELS_DIR = Path("./models")
+
+# ============================================
+# CUSTOM CSS
+# ============================================
+
 st.markdown("""
 <style>
     .main-header {
@@ -68,6 +56,7 @@ st.markdown("""
         text-align: center;
         margin-bottom: 1rem;
     }
+    
     .result-defective {
         background: linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 100%);
         border-left: 6px solid #F44336;
@@ -75,6 +64,12 @@ st.markdown("""
         border-radius: 10px;
         margin: 1rem 0;
     }
+    
+    .result-defective h2, .result-defective p {
+        color: #C62828 !important;
+        margin: 0;
+    }
+    
     .result-ok {
         background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
         border-left: 6px solid #4CAF50;
@@ -82,70 +77,126 @@ st.markdown("""
         border-radius: 10px;
         margin: 1rem 0;
     }
-    .cbir-result {
-        text-align: center;
-        padding: 10px;
+    
+    .result-ok h2, .result-ok p {
+        color: #2E7D32 !important;
+        margin: 0;
+    }
+    
+    .model-card {
+        background: white;
         border-radius: 10px;
-        margin: 5px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    .cbir-defective {
-        background-color: #FFEBEE;
-        border: 2px solid #F44336;
+    
+    .vote-badge {
+        display: inline-block;
+        padding: 0.3rem 0.8rem;
+        border-radius: 20px;
+        font-weight: bold;
+        font-size: 0.9rem;
     }
-    .cbir-ok {
-        background-color: #E8F5E9;
-        border: 2px solid #4CAF50;
+    
+    .vote-defect {
+        background-color: #FFCDD2;
+        color: #C62828;
+    }
+    
+    .vote-ok {
+        background-color: #C8E6C9;
+        color: #2E7D32;
+    }
+    
+    .stProgress > div > div > div > div {
+        background-color: #2E86AB;
     }
 </style>
 """, unsafe_allow_html=True)
 
-
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║                           MODÈLES CNN                                         ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
+# ============================================
+# MODEL DEFINITIONS
+# ============================================
 
 class BaselineCNN(nn.Module):
-    """CNN Baseline pour la classification."""
+    """Custom CNN for defect classification."""
+    
     def __init__(self, num_classes=2):
         super().__init__()
+        
         self.features = nn.Sequential(
-            nn.Conv2d(3, 32, 3, padding=1), nn.BatchNorm2d(32), nn.ReLU(), nn.MaxPool2d(2),
-            nn.Conv2d(32, 64, 3, padding=1), nn.BatchNorm2d(64), nn.ReLU(), nn.MaxPool2d(2),
-            nn.Conv2d(64, 128, 3, padding=1), nn.BatchNorm2d(128), nn.ReLU(), nn.MaxPool2d(2),
-            nn.Conv2d(128, 256, 3, padding=1), nn.BatchNorm2d(256), nn.ReLU(), nn.MaxPool2d(2),
+            # Block 1
+            nn.Conv2d(3, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2),
+            
+            # Block 2
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2),
+            
+            # Block 3
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2),
+            
+            # Block 4
+            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2, 2),
         )
+        
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        
         self.classifier = nn.Sequential(
-            nn.Linear(256, 256), nn.ReLU(), nn.Dropout(0.5), nn.Linear(256, num_classes)
+            nn.Linear(256, 256),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.5),
+            nn.Linear(256, num_classes)
         )
     
     def forward(self, x):
         x = self.features(x)
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        return self.classifier(x)
+        x = self.classifier(x)
+        return x
 
 
 class FeatureExtractor(nn.Module):
-    """Extracteur de features pour classification et CBIR."""
+    """Extract features from pre-trained CNN models."""
+    
     def __init__(self, model_name='resnet50'):
         super().__init__()
         self.model_name = model_name
         
         if model_name == 'resnet50':
-            base = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
+            base = models.resnet50(pretrained=True)
             self.features = nn.Sequential(*list(base.children())[:-1])
             self.output_dim = 2048
+            
         elif model_name == 'vgg16':
-            base = models.vgg16(weights=models.VGG16_Weights.IMAGENET1K_V1)
+            base = models.vgg16(pretrained=True)
             self.features = base.features
-            self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
+            self.avgpool = base.avgpool
             self.output_dim = 512 * 7 * 7
+            
         elif model_name == 'densenet121':
-            base = models.densenet121(weights=models.DenseNet121_Weights.IMAGENET1K_V1)
+            base = models.densenet121(pretrained=True)
             self.features = base.features
             self.output_dim = 1024
+            
+        elif model_name == 'mobilenet_v2':
+            base = models.mobilenet_v2(pretrained=True)
+            self.features = base.features
+            self.output_dim = 1280
         
+        # Freeze weights
         for param in self.parameters():
             param.requires_grad = False
     
@@ -154,85 +205,59 @@ class FeatureExtractor(nn.Module):
         if self.model_name == 'vgg16':
             x = self.avgpool(x)
         elif self.model_name == 'densenet121':
-            x = nn.functional.relu(x, inplace=True)
             x = nn.functional.adaptive_avg_pool2d(x, (1, 1))
-        return x.view(x.size(0), -1)
+        elif self.model_name == 'mobilenet_v2':
+            x = nn.functional.adaptive_avg_pool2d(x, (1, 1))
+        x = x.view(x.size(0), -1)
+        return x
 
 
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║                           FONCTIONS DE DISTANCE                               ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
-
-def euclidean_distance(query, database):
-    """Distance Euclidienne: √Σ(xi - yi)²"""
-    return cdist(query, database, metric='euclidean').flatten()
-
-def manhattan_distance(query, database):
-    """Distance Manhattan: Σ|xi - yi|"""
-    return cdist(query, database, metric='cityblock').flatten()
-
-def cosine_distance(query, database):
-    """Distance Cosinus: 1 - cos(θ)"""
-    return cdist(query, database, metric='cosine').flatten()
-
-def chebyshev_distance(query, database):
-    """Distance Chebyshev: max|xi - yi|"""
-    return cdist(query, database, metric='chebyshev').flatten()
-
-def canberra_distance(query, database):
-    """Distance Canberra: Σ(|xi-yi|/(|xi|+|yi|))"""
-    return cdist(query, database, metric='canberra').flatten()
-
-DISTANCE_FUNCTIONS = {
-    'Euclidienne': euclidean_distance,
-    'Manhattan': manhattan_distance,
-    'Cosinus': cosine_distance,
-    'Chebyshev': chebyshev_distance,
-    'Canberra': canberra_distance,
-}
-
-
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║                           FONCTIONS UTILITAIRES                               ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
+# ============================================
+# HELPER FUNCTIONS
+# ============================================
 
 def get_transform():
-    """Transformation des images."""
+    """Get image preprocessing transform."""
     return transforms.Compose([
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
         transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        transforms.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225]
+        )
     ])
 
 
 @st.cache_resource
 def load_feature_extractors():
-    """Charge les extracteurs de features."""
+    """Load pre-trained feature extractors."""
     extractors = {}
-    for name in ['resnet50', 'vgg16', 'densenet121']:
-        try:
-            extractor = FeatureExtractor(name)
-            extractor.eval()
-            extractor.to(DEVICE)
-            extractors[name] = extractor
-        except Exception as e:
-            st.warning(f"Impossible de charger {name}: {e}")
+    
+    with st.spinner("Loading feature extractors..."):
+        for name in ['resnet50', 'vgg16', 'densenet121']:
+            try:
+                extractor = FeatureExtractor(name)
+                extractor.eval()
+                extractor.to(DEVICE)
+                extractors[name] = extractor
+            except Exception as e:
+                st.warning(f"Could not load {name}: {e}")
+    
     return extractors
 
 
 @st.cache_resource
-def load_classification_models():
-    """Charge les modèles de classification."""
+def load_models():
+    """
+    Load trained models.
+    Returns dict of models and their associated extractors/scalers.
+    """
     models_dict = {
         'cnn_models': {},
-        'shallow_models': {},
-        'scalers': {}
+        'shallow_models': {}
     }
     
-    if not MODELS_DIR.exists():
-        return models_dict
-    
-    # CNN Baseline
+    # Try to load CNN baseline
     cnn_path = MODELS_DIR / 'baseline_cnn.pth'
     if cnn_path.exists():
         try:
@@ -242,437 +267,486 @@ def load_classification_models():
             cnn.to(DEVICE)
             models_dict['cnn_models']['CNN_Baseline'] = cnn
         except Exception as e:
-            pass
+            st.warning(f"Could not load CNN: {e}")
     
-    # Shallow classifiers
-    for pkl_file in MODELS_DIR.glob('*.pkl'):
-        if '_scaler' in pkl_file.stem:
-            # C'est un scaler
-            name = pkl_file.stem.replace('_scaler', '')
+    # Try to load shallow classifiers
+    for model_file in MODELS_DIR.glob('*.pkl'):
+        if '_scaler' not in model_file.stem:
             try:
-                models_dict['scalers'][name] = joblib.load(pkl_file)
-            except:
-                pass
-        else:
-            # C'est un classifier
-            try:
-                model = joblib.load(pkl_file)
-                # Extraire le nom de l'extracteur (ex: resnet50_svm -> resnet50)
-                parts = pkl_file.stem.split('_')
-                extractor_name = parts[0]
-                models_dict['shallow_models'][pkl_file.stem] = {
+                model = joblib.load(model_file)
+                models_dict['shallow_models'][model_file.stem] = {
                     'model': model,
-                    'extractor': extractor_name
+                    'extractor': model_file.stem.split('_')[0]  # e.g., resnet50_svm -> resnet50
                 }
-            except:
+            except Exception as e:
                 pass
+    
+    # Load scalers
+    models_dict['scalers'] = {}
+    for scaler_file in MODELS_DIR.glob('*_scaler.pkl'):
+        try:
+            name = scaler_file.stem.replace('_scaler', '')
+            models_dict['scalers'][name] = joblib.load(scaler_file)
+        except:
+            pass
     
     return models_dict
 
 
-@st.cache_resource
-def load_cbir_signatures():
-    """Charge les bases de signatures CBIR."""
-    signatures = {}
+def create_demo_models():
+    """
+    Create demo models for testing when no trained models exist.
+    These are NOT trained - just for UI demonstration!
+    """
+    from sklearn.svm import SVC
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.preprocessing import StandardScaler
+    import xgboost as xgb
     
-    if not SIGNATURES_DIR.exists():
-        return signatures
+    # Create dummy classifiers (untrained - will predict randomly)
+    demo_models = {
+        'cnn_models': {
+            'CNN_Baseline': BaselineCNN().eval().to(DEVICE)
+        },
+        'shallow_models': {
+            'resnet50_SVM': {
+                'model': SVC(kernel='rbf', probability=True),
+                'extractor': 'resnet50'
+            },
+            'resnet50_XGBoost': {
+                'model': xgb.XGBClassifier(n_estimators=100, use_label_encoder=False, eval_metric='logloss'),
+                'extractor': 'resnet50'
+            },
+            'vgg16_RandomForest': {
+                'model': RandomForestClassifier(n_estimators=100),
+                'extractor': 'vgg16'
+            },
+            'densenet121_SVM': {
+                'model': SVC(kernel='linear', probability=True),
+                'extractor': 'densenet121'
+            }
+        },
+        'scalers': {
+            'resnet50': StandardScaler(),
+            'vgg16': StandardScaler(),
+            'densenet121': StandardScaler()
+        },
+        'is_demo': True
+    }
     
-    for pkl_file in SIGNATURES_DIR.glob('signatures_*.pkl'):
-        try:
-            with open(pkl_file, 'rb') as f:
-                db = pickle.load(f)
-            model_name = db['metadata']['model_name']
-            signatures[model_name] = db
-        except Exception as e:
-            st.warning(f"Erreur avec {pkl_file}: {e}")
-    
-    return signatures
+    return demo_models
 
 
-def predict_ensemble(image_tensor, extractors, models_dict):
-    """Prédiction avec vote majoritaire."""
-    predictions = {}
+def predict_with_cnn(model, image_tensor):
+    """Make prediction with CNN model."""
+    model.eval()
+    with torch.no_grad():
+        output = model(image_tensor.to(DEVICE))
+        probs = torch.softmax(output, dim=1)
+        pred = output.argmax(dim=1).item()
+        confidence = probs[0][pred].item()
     
-    # CNN predictions
+    return pred, confidence
+
+
+def predict_with_shallow(model, features, scaler=None):
+    """Make prediction with shallow classifier."""
+    if scaler is not None:
+        features = scaler.transform(features)
+    
+    pred = model.predict(features)[0]
+    
+    # Get probability if available
+    if hasattr(model, 'predict_proba'):
+        probs = model.predict_proba(features)[0]
+        confidence = probs[pred]
+    else:
+        confidence = 0.5  # Default if no probability
+    
+    return int(pred), float(confidence)
+
+
+def ensemble_predict(image_tensor, extractors, models_dict):
+    """
+    Make ensemble prediction using majority voting.
+    
+    Returns:
+        dict with prediction, confidence, votes, and individual results
+    """
+    all_predictions = {}
+    
+    # 1. CNN predictions
     for name, cnn in models_dict.get('cnn_models', {}).items():
         try:
-            cnn.eval()
-            with torch.no_grad():
-                output = cnn(image_tensor.to(DEVICE))
-                probs = torch.softmax(output, dim=1)
-                pred = output.argmax(dim=1).item()
-                conf = probs[0][pred].item()
-            predictions[name] = {'prediction': pred, 'confidence': conf}
-        except:
-            pass
+            pred, conf = predict_with_cnn(cnn, image_tensor)
+            all_predictions[name] = {
+                'prediction': pred,
+                'confidence': conf,
+                'class_name': 'Defective' if pred == 1 else 'Non-Defective'
+            }
+        except Exception as e:
+            st.warning(f"Error with {name}: {e}")
     
-    # Shallow predictions
+    # 2. Shallow model predictions
     extracted_features = {}
-    for name, info in models_dict.get('shallow_models', {}).items():
+    
+    for name, model_info in models_dict.get('shallow_models', {}).items():
         try:
-            ext_name = info['extractor']
+            extractor_name = model_info['extractor']
             
-            if ext_name not in extracted_features and ext_name in extractors:
-                extractor = extractors[ext_name]
-                with torch.no_grad():
-                    feats = extractor(image_tensor.to(DEVICE))
-                    extracted_features[ext_name] = feats.cpu().numpy()
+            # Extract features if not already done
+            if extractor_name not in extracted_features:
+                if extractor_name in extractors:
+                    extractor = extractors[extractor_name]
+                    extractor.eval()
+                    with torch.no_grad():
+                        features = extractor(image_tensor.to(DEVICE))
+                        extracted_features[extractor_name] = features.cpu().numpy()
             
-            if ext_name in extracted_features:
-                features = extracted_features[ext_name]
-                scaler = models_dict.get('scalers', {}).get(ext_name)
-                if scaler:
-                    features = scaler.transform(features)
+            if extractor_name in extracted_features:
+                features = extracted_features[extractor_name]
+                scaler = models_dict.get('scalers', {}).get(extractor_name)
                 
-                pred = info['model'].predict(features)[0]
-                conf = 0.8  # Default confidence
-                if hasattr(info['model'], 'predict_proba'):
-                    probs = info['model'].predict_proba(features)[0]
-                    conf = probs[pred]
+                # For demo mode, simulate prediction
+                if models_dict.get('is_demo', False):
+                    # Simulate based on features (random but deterministic)
+                    feature_sum = np.sum(features)
+                    pred = 1 if (feature_sum % 2) > 0.5 else 0
+                    conf = 0.6 + np.random.random() * 0.35
+                else:
+                    pred, conf = predict_with_shallow(model_info['model'], features, scaler)
                 
-                predictions[name] = {'prediction': int(pred), 'confidence': float(conf)}
-        except:
-            pass
+                all_predictions[name] = {
+                    'prediction': pred,
+                    'confidence': conf,
+                    'class_name': 'Defective' if pred == 1 else 'Non-Defective'
+                }
+        except Exception as e:
+            st.warning(f"Error with {name}: {e}")
     
-    if not predictions:
-        return None
+    # 3. Majority voting
+    if not all_predictions:
+        return {
+            'prediction': 0,
+            'class_name': 'Unknown',
+            'confidence': 0.0,
+            'num_models': 0,
+            'votes': {'defective': 0, 'non_defective': 0},
+            'model_results': {}
+        }
     
-    # Vote majoritaire
-    votes = [p['prediction'] for p in predictions.values()]
+    votes = [p['prediction'] for p in all_predictions.values()]
     defective_votes = sum(votes)
-    total = len(votes)
+    non_defective_votes = len(votes) - defective_votes
     
-    final_pred = 1 if defective_votes > total / 2 else 0
-    confidence = max(defective_votes, total - defective_votes) / total
+    final_pred = 1 if defective_votes > non_defective_votes else 0
+    confidence = max(defective_votes, non_defective_votes) / len(votes)
     
     return {
         'prediction': final_pred,
-        'class_name': CLASSES[final_pred],
+        'class_name': 'Defective' if final_pred == 1 else 'Non-Defective',
         'confidence': confidence,
-        'votes': {'defective': defective_votes, 'non_defective': total - defective_votes},
-        'model_results': predictions
+        'num_models': len(all_predictions),
+        'votes': {
+            'defective': defective_votes,
+            'non_defective': non_defective_votes
+        },
+        'model_results': all_predictions
     }
 
 
-def cbir_search(image_tensor, extractor, signature_db, k=5, distance_metric='Cosinus'):
-    """Recherche CBIR."""
-    
-    # Extraire les features de la query
-    extractor.eval()
-    with torch.no_grad():
-        query_features = extractor(image_tensor.to(DEVICE))
-        query_features = query_features.cpu().numpy()
-    
-    # Normaliser si la base est normalisée
-    if signature_db['metadata'].get('normalized', False):
-        norm = np.linalg.norm(query_features)
-        if norm > 0:
-            query_features = query_features / norm
-    
-    # Calculer les distances
-    distance_func = DISTANCE_FUNCTIONS[distance_metric]
-    distances = distance_func(query_features, signature_db['features'])
-    
-    # Trier et prendre les K premiers
-    sorted_indices = np.argsort(distances)[:k]
-    
-    results = []
-    for rank, idx in enumerate(sorted_indices, 1):
-        results.append({
-            'rank': rank,
-            'path': signature_db['paths'][idx],
-            'distance': float(distances[idx]),
-            'label': int(signature_db['labels'][idx]),
-            'class_name': CLASSES[signature_db['labels'][idx]]
-        })
-    
-    return results
-
-
-def create_gauge_chart(value, title="Confiance"):
-    """Crée un gauge pour la confiance."""
+def create_gauge_chart(value, title="Confidence"):
+    """Create a gauge chart for confidence visualization."""
     color = "#F44336" if value > 0.7 else "#FFC107" if value > 0.5 else "#4CAF50"
     
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=value * 100,
-        title={'text': title, 'font': {'size': 16}},
-        number={'suffix': '%', 'font': {'size': 28}},
+        title={'text': title, 'font': {'size': 18}},
+        number={'suffix': '%', 'font': {'size': 32}},
         gauge={
-            'axis': {'range': [0, 100]},
+            'axis': {'range': [0, 100], 'tickwidth': 1},
             'bar': {'color': color},
+            'bgcolor': "white",
+            'borderwidth': 2,
+            'bordercolor': "gray",
             'steps': [
                 {'range': [0, 50], 'color': '#E8F5E9'},
                 {'range': [50, 75], 'color': '#FFF3E0'},
                 {'range': [75, 100], 'color': '#FFEBEE'}
-            ]
+            ],
+            'threshold': {
+                'line': {'color': "red", 'width': 4},
+                'thickness': 0.75,
+                'value': 90
+            }
         }
     ))
-    fig.update_layout(height=200, margin=dict(l=20, r=20, t=40, b=20))
+    
+    fig.update_layout(
+        height=250,
+        margin=dict(l=20, r=20, t=40, b=20)
+    )
+    
     return fig
 
 
-# ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║                           APPLICATION PRINCIPALE                              ║
-# ╚══════════════════════════════════════════════════════════════════════════════╝
+def create_vote_chart(votes):
+    """Create a pie chart for vote distribution."""
+    labels = ['Non-Defective', 'Defective']
+    values = [votes['non_defective'], votes['defective']]
+    colors = ['#4CAF50', '#F44336']
+    
+    fig = px.pie(
+        values=values,
+        names=labels,
+        color_discrete_sequence=colors,
+        hole=0.4
+    )
+    
+    fig.update_layout(
+        title="Vote Distribution",
+        height=300,
+        margin=dict(l=20, r=20, t=40, b=20),
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=-0.2)
+    )
+    
+    fig.update_traces(
+        textposition='inside',
+        textinfo='value+percent',
+        textfont_size=14
+    )
+    
+    return fig
+
+
+# ============================================
+# MAIN APP
+# ============================================
 
 def main():
     # Header
     st.markdown('<h1 class="main-header">🏭 Détection de Défauts Industriels</h1>', unsafe_allow_html=True)
-    st.markdown('<p style="text-align: center; color: #666;">Classification par vote majoritaire + Recherche d\'images similaires (CBIR)</p>', unsafe_allow_html=True)
-    
-    # Sidebar
-    with st.sidebar:
-        st.title("⚙️ Configuration")
-        
-        st.markdown("---")
-        
-        # Mode demo
-        demo_mode = st.checkbox("🧪 Mode Démo", value=True, 
-                               help="Simule les résultats si aucun modèle n'est chargé")
-        
-        st.markdown("---")
-        
-        # Paramètres CBIR
-        st.subheader("🔍 Paramètres CBIR")
-        
-        k_results = st.slider("Nombre de résultats (K)", 1, 10, 5)
-        
-        distance_metric = st.selectbox(
-            "Métrique de distance",
-            list(DISTANCE_FUNCTIONS.keys()),
-            index=2  # Cosinus par défaut
-        )
-        
-        st.markdown("---")
-        st.info(f"💻 Device: {DEVICE}")
-    
-    # Charger les ressources
-    with st.spinner("Chargement des modèles..."):
-        extractors = load_feature_extractors()
-        models_dict = load_classification_models()
-        signatures = load_cbir_signatures()
-    
-    # Afficher le statut
-    col_status1, col_status2, col_status3 = st.columns(3)
-    with col_status1:
-        n_classifiers = len(models_dict.get('cnn_models', {})) + len(models_dict.get('shallow_models', {}))
-        st.metric("Classifiers", n_classifiers if n_classifiers > 0 else "Demo")
-    with col_status2:
-        st.metric("Extracteurs", len(extractors))
-    with col_status3:
-        st.metric("Signatures CBIR", len(signatures) if signatures else "Non disponible")
+    st.markdown('<p style="text-align: center; color: #666;">Upload an image to detect defects using ensemble AI models</p>', unsafe_allow_html=True)
     
     st.markdown("---")
     
-    # Upload
+    # Sidebar
+    with st.sidebar:
+        st.image("https://img.icons8.com/clouds/100/factory.png", width=80)
+        st.title("⚙️ Settings")
+        
+        st.markdown("---")
+        
+        # Mode selection
+        use_demo = st.checkbox(
+            "🧪 Demo Mode",
+            value=True,
+            help="Use simulated models for demonstration (no trained models required)"
+        )
+        
+        st.markdown("---")
+        
+        # Model info
+        st.subheader("📊 Models")
+        st.markdown("""
+        **Ensemble includes:**
+        - CNN Baseline
+        - ResNet50 + SVM
+        - ResNet50 + XGBoost
+        - VGG16 + Random Forest
+        - DenseNet121 + SVM
+        """)
+        
+        st.markdown("---")
+        
+        # Device info
+        st.subheader("💻 System")
+        st.info(f"Device: {DEVICE}")
+        
+        st.markdown("---")
+        st.markdown("**Hackathon SKEMA 2026 -- Groupe 1 ** 🚀")
+    
+    # Load models
+    with st.spinner("Loading models..."):
+        extractors = load_feature_extractors()
+        
+        if use_demo:
+            models_dict = create_demo_models()
+            st.info("🧪 **Demo Mode**: Using simulated predictions for UI demonstration.")
+        else:
+            models_dict = load_models()
+            if not models_dict.get('cnn_models') and not models_dict.get('shallow_models'):
+                st.warning("⚠️ No trained models found. Using demo mode.")
+                models_dict = create_demo_models()
+    
+    # Main content
     col1, col2 = st.columns([1, 2])
     
     with col1:
         st.subheader("📤 Upload Image")
+        
         uploaded_file = st.file_uploader(
-            "Choisir une image",
-            type=['jpg', 'jpeg', 'png', 'bmp']
+            "Choose an image",
+            type=['jpg', 'jpeg', 'png', 'bmp'],
+            help="Upload an image of the industrial component to analyze"
         )
         
-        if uploaded_file:
+        if uploaded_file is not None:
+            # Display uploaded image
             image = Image.open(uploaded_file).convert('RGB')
-            st.image(image, caption="Image uploadée", use_container_width=True)
+            st.image(image, caption="Uploaded Image", use_container_width=True)
+            
+            # Image info
+            st.markdown(f"""
+            **File:** `{uploaded_file.name}`  
+            **Size:** {image.size[0]} × {image.size[1]} px
+            """)
     
     with col2:
-        st.subheader("🔬 Résultats d'Analyse")
+        st.subheader("🔬 Analysis Results")
         
-        if uploaded_file:
-            if st.button("🚀 Analyser", type="primary", use_container_width=True):
+        if uploaded_file is not None:
+            # Analyze button
+            if st.button("🚀 Analyze Image", type="primary", use_container_width=True):
                 
-                # Préparer l'image
+                # Preprocess image
                 transform = get_transform()
                 image_tensor = transform(image).unsqueeze(0)
                 
-                # Progress
-                progress = st.progress(0)
-                status = st.empty()
+                # Progress bar
+                progress_bar = st.progress(0)
+                status_text = st.empty()
                 
-                # =============================================
-                # PARTIE 1: CLASSIFICATION
-                # =============================================
-                status.text("🎯 Classification en cours...")
-                progress.progress(30)
+                status_text.text("Extracting features...")
+                progress_bar.progress(20)
+                time.sleep(0.3)
                 
-                if demo_mode or not models_dict.get('cnn_models'):
-                    # Mode démo: simuler
-                    time.sleep(0.5)
-                    pred_result = {
-                        'prediction': np.random.choice([0, 1]),
-                        'class_name': np.random.choice(['non_defective', 'defective']),
-                        'confidence': np.random.uniform(0.6, 0.95),
-                        'votes': {'defective': np.random.randint(2, 5), 'non_defective': np.random.randint(1, 3)},
-                        'model_results': {
-                            'CNN_Baseline': {'prediction': 1, 'confidence': 0.85},
-                            'ResNet50_SVM': {'prediction': 1, 'confidence': 0.90},
-                            'VGG16_RF': {'prediction': 0, 'confidence': 0.75},
-                        }
-                    }
-                    pred_result['votes'] = {
-                        'defective': sum(1 for m in pred_result['model_results'].values() if m['prediction'] == 1),
-                        'non_defective': sum(1 for m in pred_result['model_results'].values() if m['prediction'] == 0)
-                    }
-                    pred_result['prediction'] = 1 if pred_result['votes']['defective'] > pred_result['votes']['non_defective'] else 0
-                    pred_result['class_name'] = CLASSES[pred_result['prediction']]
-                    pred_result['confidence'] = max(pred_result['votes'].values()) / sum(pred_result['votes'].values())
-                else:
-                    pred_result = predict_ensemble(image_tensor, extractors, models_dict)
+                status_text.text("Running ensemble prediction...")
+                progress_bar.progress(50)
                 
-                progress.progress(60)
+                # Make prediction
+                start_time = time.time()
+                result = ensemble_predict(image_tensor, extractors, models_dict)
+                elapsed = time.time() - start_time
                 
-                # =============================================
-                # PARTIE 2: CBIR
-                # =============================================
-                status.text("🔍 Recherche d'images similaires...")
+                progress_bar.progress(90)
+                status_text.text("Generating results...")
+                time.sleep(0.2)
                 
-                cbir_results = {}
+                progress_bar.progress(100)
+                status_text.empty()
+                progress_bar.empty()
                 
-                if signatures:
-                    for model_name, sig_db in signatures.items():
-                        if model_name in extractors:
-                            try:
-                                results = cbir_search(
-                                    image_tensor, 
-                                    extractors[model_name], 
-                                    sig_db, 
-                                    k=k_results,
-                                    distance_metric=distance_metric
-                                )
-                                cbir_results[model_name] = results
-                            except Exception as e:
-                                st.warning(f"Erreur CBIR {model_name}: {e}")
-                elif demo_mode:
-                    # Simuler des résultats CBIR
-                    for model_name in ['resnet50', 'vgg16']:
-                        cbir_results[model_name] = [
-                            {
-                                'rank': i+1,
-                                'path': f'./data/train/{"defective" if np.random.random() > 0.5 else "non_defective"}/img_{np.random.randint(1, 100):03d}.jpg',
-                                'distance': np.random.uniform(0.1, 0.5),
-                                'label': np.random.choice([0, 1]),
-                                'class_name': np.random.choice(['non_defective', 'defective'])
-                            }
-                            for i in range(k_results)
-                        ]
-                
-                progress.progress(100)
-                status.empty()
-                progress.empty()
-                
-                # =============================================
-                # AFFICHAGE DES RÉSULTATS
-                # =============================================
-                
+                # Display result
                 st.markdown("---")
                 
-                # Résultat principal
-                if pred_result:
-                    if pred_result['prediction'] == 1:
-                        st.markdown(f"""
-                        <div class="result-defective">
-                            <h2>⚠️ DÉFAUT DÉTECTÉ</h2>
-                            <p>Confiance: <strong>{pred_result['confidence']:.1%}</strong> 
-                            ({pred_result['votes']['defective']}/{sum(pred_result['votes'].values())} modèles)</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"""
-                        <div class="result-ok">
-                            <h2>✅ PIÈCE CONFORME</h2>
-                            <p>Confiance: <strong>{pred_result['confidence']:.1%}</strong>
-                            ({pred_result['votes']['non_defective']}/{sum(pred_result['votes'].values())} modèles)</p>
-                        </div>
-                        """, unsafe_allow_html=True)
+                if result['class_name'] == 'Defective':
+                    st.markdown(f"""
+                    <div class="result-defective">
+                        <h2>⚠️ DEFECTIVE</h2>
+                        <p>Confidence: <strong>{result['confidence']:.1%}</strong> ({result['votes']['defective']}/{result['num_models']} models)</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div class="result-ok">
+                        <h2>✅ NON-DEFECTIVE</h2>
+                        <p>Confidence: <strong>{result['confidence']:.1%}</strong> ({result['votes']['non_defective']}/{result['num_models']} models)</p>
+                    </div>
+                    """, unsafe_allow_html=True)
                 
-                # Tabs pour détails
-                tab1, tab2, tab3 = st.tabs(["📊 Vote Majoritaire", "🔍 CBIR - Images Similaires", "📈 Détails"])
+                # Detailed results in tabs
+                tab1, tab2, tab3 = st.tabs(["📊 Vote Details", "🤖 Model Predictions", "📈 Confidence"])
                 
                 with tab1:
-                    if pred_result and pred_result.get('model_results'):
-                        col_a, col_b = st.columns(2)
-                        
-                        with col_a:
-                            # Pie chart des votes
-                            fig = px.pie(
-                                values=[pred_result['votes']['non_defective'], pred_result['votes']['defective']],
-                                names=['Non-Défectueux', 'Défectueux'],
-                                color_discrete_sequence=['#4CAF50', '#F44336'],
-                                hole=0.4
-                            )
-                            fig.update_layout(height=300)
+                    col_a, col_b = st.columns(2)
+                    
+                    with col_a:
+                        # Vote distribution pie chart
+                        if result['num_models'] > 0:
+                            fig = create_vote_chart(result['votes'])
                             st.plotly_chart(fig, use_container_width=True)
-                        
-                        with col_b:
-                            # Tableau des modèles
-                            model_data = []
-                            for name, res in pred_result['model_results'].items():
-                                model_data.append({
-                                    'Modèle': name,
-                                    'Prédiction': '🔴 Défaut' if res['prediction'] == 1 else '🟢 OK',
-                                    'Confiance': f"{res['confidence']:.1%}"
-                                })
-                            st.dataframe(pd.DataFrame(model_data), use_container_width=True, hide_index=True)
+                    
+                    with col_b:
+                        st.markdown("### 🗳️ Voting Summary")
+                        st.markdown(f"""
+                        | Metric | Value |
+                        |--------|-------|
+                        | **Total Models** | {result['num_models']} |
+                        | **Defective Votes** | {result['votes']['defective']} |
+                        | **Non-Defective Votes** | {result['votes']['non_defective']} |
+                        | **Final Decision** | {result['class_name']} |
+                        | **Confidence** | {result['confidence']:.1%} |
+                        | **Processing Time** | {elapsed:.2f}s |
+                        """)
                 
                 with tab2:
-                    if cbir_results:
-                        st.markdown(f"**Métrique:** {distance_metric} | **K:** {k_results}")
+                    st.markdown("### 🤖 Individual Model Predictions")
+                    
+                    if result['model_results']:
+                        # Create DataFrame for display
+                        model_data = []
+                        for model_name, pred in result['model_results'].items():
+                            model_data.append({
+                                'Model': model_name,
+                                'Prediction': pred['class_name'],
+                                'Confidence': f"{pred['confidence']:.1%}"
+                            })
                         
-                        for model_name, results in cbir_results.items():
-                            st.markdown(f"### 🧠 {model_name.upper()}")
-                            
-                            cols = st.columns(min(k_results, 5))
-                            
-                            for i, res in enumerate(results[:5]):
-                                with cols[i]:
-                                    # Essayer de charger l'image
-                                    try:
-                                        if Path(res['path']).exists():
-                                            img = Image.open(res['path'])
-                                            st.image(img, use_container_width=True)
-                                        else:
-                                            st.info(f"📷 Image #{res['rank']}")
-                                    except:
-                                        st.info(f"📷 Image #{res['rank']}")
-                                    
-                                    # Afficher les infos
-                                    status_icon = "🔴" if res['label'] == 1 else "🟢"
-                                    st.markdown(f"""
-                                    <div style="text-align: center; padding: 5px; 
-                                         background: {'#FFEBEE' if res['label'] == 1 else '#E8F5E9'}; 
-                                         border-radius: 5px;">
-                                        <b>#{res['rank']}</b> {status_icon}<br>
-                                        <small>Dist: {res['distance']:.4f}</small>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                            
-                            st.markdown("---")
+                        df = pd.DataFrame(model_data)
+                        
+                        # Style the dataframe
+                        def highlight_prediction(val):
+                            if val == 'Defective':
+                                return 'background-color: #FFCDD2; color: #C62828'
+                            else:
+                                return 'background-color: #C8E6C9; color: #2E7D32'
+                        
+                        styled_df = df.style.applymap(
+                            highlight_prediction, 
+                            subset=['Prediction']
+                        )
+                        
+                        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+                        
+                        # Visual representation
+                        st.markdown("#### Visual Summary")
+                        cols = st.columns(len(result['model_results']))
+                        
+                        for i, (model_name, pred) in enumerate(result['model_results'].items()):
+                            with cols[i]:
+                                icon = "🔴" if pred['prediction'] == 1 else "🟢"
+                                short_name = model_name.replace('_', '\n')
+                                st.markdown(f"""
+                                <div style="text-align: center; padding: 10px; background: {'#FFEBEE' if pred['prediction'] == 1 else '#E8F5E9'}; border-radius: 10px;">
+                                    <div style="font-size: 24px;">{icon}</div>
+                                    <div style="font-size: 11px; font-weight: bold;">{short_name}</div>
+                                    <div style="font-size: 10px;">{pred['confidence']:.0%}</div>
+                                </div>
+                                """, unsafe_allow_html=True)
                     else:
-                        st.info("Aucune base de signatures CBIR disponible. Créez-en avec `create_signatures.py`")
+                        st.info("No model predictions available.")
                 
                 with tab3:
-                    if pred_result:
-                        # Gauge de confiance
-                        fig = create_gauge_chart(pred_result['confidence'], "Confiance Ensemble")
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                        # Interprétation
-                        if pred_result['confidence'] >= 0.8:
-                            st.success("✅ **Haute confiance** - Les modèles sont d'accord")
-                        elif pred_result['confidence'] >= 0.6:
-                            st.warning("⚠️ **Confiance moyenne** - Désaccord entre modèles")
-                        else:
-                            st.error("❌ **Faible confiance** - Vérification manuelle recommandée")
+                    # Confidence gauge
+                    fig = create_gauge_chart(result['confidence'], "Ensemble Confidence")
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Interpretation
+                    if result['confidence'] >= 0.8:
+                        st.success("✅ **High confidence** - The models strongly agree on this prediction.")
+                    elif result['confidence'] >= 0.6:
+                        st.warning("⚠️ **Medium confidence** - There is some disagreement between models.")
+                    else:
+                        st.error("❌ **Low confidence** - Models are split. Manual inspection recommended.")
         else:
+            # Placeholder when no image uploaded
             st.markdown("""
             <div style="text-align: center; padding: 3rem; background: #f5f5f5; border-radius: 10px; border: 2px dashed #ccc;">
-                <h3 style="color: #999;">👈 Uploadez une image pour commencer</h3>
-                <p style="color: #bbb;">Formats: JPG, JPEG, PNG, BMP</p>
+                <h3 style="color: #999;">👈 Upload an image to start</h3>
+                <p style="color: #bbb;">Supported formats: JPG, JPEG, PNG, BMP</p>
             </div>
             """, unsafe_allow_html=True)
     
@@ -680,7 +754,8 @@ def main():
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; color: #999; font-size: 12px;">
-        🏭 Hackathon IA - Détection de Défauts Industriels | Classification + CBIR
+        🏭 Industrial Defect Detection System | Hackathon SKEMA 2026 -- Groupe 1 | 
+        Ensemble: CNN + ResNet50 + VGG16 + DenseNet121
     </div>
     """, unsafe_allow_html=True)
 
