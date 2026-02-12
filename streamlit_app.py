@@ -1,3 +1,4 @@
+
 """
 🏭 Application Complète - Prédiction + CBIR
 ============================================
