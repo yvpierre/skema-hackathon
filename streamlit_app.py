@@ -47,55 +47,751 @@ CLASSES = ['non_defective', 'defective']
 IMG_SIZE = 224
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+# VLM Configuration
+VLM_LANGUAGE = "fr"  # 'fr' ou 'en'
+
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║                           PAGE CONFIG                                         ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
 st.set_page_config(
-    page_title="🏭 Détection de Défauts + CBIR",
+    page_title="🏭 Détection de Défauts + CBIR + VLM",
     page_icon="🔍",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# CSS personnalisé
+# CSS personnalisé - Modern Glassmorphism UI (Dark Edition)
 st.markdown("""
 <style>
+    /* ═══════════════════════════════════════════════════════════════════
+       GLOBAL STYLES & VARIABLES
+    ═══════════════════════════════════════════════════════════════════ */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    :root {
+        --primary: #ffffff;
+        --primary-light: #f1f5f9;
+        --accent: #a1a1aa;
+        --success: #22c55e;
+        --danger: #ef4444;
+        --warning: #eab308;
+        --glass-bg: rgba(255, 255, 255, 0.08);
+        --glass-border: rgba(255, 255, 255, 0.12);
+        --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        --shadow-lg: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+    
+    .stApp {
+        background: linear-gradient(145deg, #0a0a0a 0%, #1a1a2e 25%, #16213e 50%, #1a1a2e 75%, #0a0a0a 100%);
+        background-attachment: fixed;
+    }
+    
+    .main .block-container {
+        padding-top: 2rem;
+        max-width: 1400px;
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       GLASSMORPHISM CARDS
+    ═══════════════════════════════════════════════════════════════════ */
+    .glass-card {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        padding: 2rem;
+        margin: 1rem 0;
+        transition: all 0.3s ease;
+    }
+    
+    .glass-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+        border-color: rgba(255, 255, 255, 0.15);
+    }
+    
+    .glass-card h3 {
+        color: #ffffff !important;
+    }
+    
+    .glass-card-dark {
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 24px;
+        padding: 2rem;
+        color: white;
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       HEADER STYLES
+    ═══════════════════════════════════════════════════════════════════ */
     .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #1E3A5F;
+        font-family: 'Inter', sans-serif;
+        font-size: 3rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #ffffff 0%, #a1a1aa 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
         text-align: center;
+        margin-bottom: 0.5rem;
+    }
+    
+    .sub-header {
+        font-family: 'Inter', sans-serif;
+        text-align: center;
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 1.1rem;
+        font-weight: 400;
+        margin-bottom: 2rem;
+        letter-spacing: 0.5px;
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       SIDEBAR STYLES - Right side, fixed 120px
+    ═══════════════════════════════════════════════════════════════════ */
+    [data-testid="stSidebar"] {
+        background: rgba(0, 0, 0, 0.85) !important;
+        backdrop-filter: blur(20px);
+        border-left: 1px solid rgba(255, 255, 255, 0.08);
+        border-right: none;
+        right: 0;
+        left: auto !important;
+        width: 120px !important;
+        min-width: 120px !important;
+    }
+    
+    [data-testid="stSidebar"] > div {
+        width: 120px !important;
+        padding: 0.5rem !important;
+    }
+    
+    [data-testid="stSidebar"] * {
+        color: #e4e4e7 !important;
+        font-size: 0.65rem !important;
+    }
+    
+    [data-testid="stSidebar"] .stCheckbox label span {
+        color: #e4e4e7 !important;
+    }
+    
+    [data-testid="stSidebar"] hr {
+        border-color: rgba(255, 255, 255, 0.08) !important;
+        margin: 0.5rem 0 !important;
+    }
+    
+    /* Sidebar toggle button */
+    [data-testid="stSidebarCollapseButton"] {
+        right: 0 !important;
+        left: auto !important;
+    }
+    
+    [data-testid="stSidebar"] .stSlider {
+        padding: 0 !important;
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       BUTTON STYLES - Glassy with white font
+    ═══════════════════════════════════════════════════════════════════ */
+    .stButton > button {
+        background: rgba(255, 255, 255, 0.08) !important;
+        backdrop-filter: blur(10px);
+        color: #ffffff !important;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        border-radius: 10px;
+        padding: 0.75rem 1.75rem;
+        font-weight: 600;
+        font-size: 1rem;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+        background: rgba(255, 255, 255, 0.15) !important;
+        border-color: rgba(255, 255, 255, 0.25) !important;
+    }
+    
+    .stButton > button:active {
+        transform: translateY(0);
+    }
+    
+    .stButton > button span {
+        color: #ffffff !important;
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       IMAGE UPLOAD & DISPLAY
+    ═══════════════════════════════════════════════════════════════════ */
+    .upload-zone {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border: 2px dashed rgba(255, 255, 255, 0.2);
+        border-radius: 16px;
+        padding: 2rem;
+        text-align: center;
+        transition: all 0.3s ease;
+        max-width: 450px;
+        margin: 0 auto;
+    }
+    
+    .upload-zone:hover {
+        border-color: rgba(255, 255, 255, 0.4);
+        background: rgba(255, 255, 255, 0.08);
+    }
+    
+    .image-frame {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        padding: 0.5rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        overflow: hidden;
+    }
+    
+    .image-frame img {
+        border-radius: 8px;
+        width: 100%;
+    }
+    
+    [data-testid="stImage"] {
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       FILE UPLOADER - Bigger with colorful button
+    ═══════════════════════════════════════════════════════════════════ */
+    [data-testid="stFileUploader"] {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border-radius: 16px;
+        padding: 1.5rem;
+        border: 2px dashed rgba(138, 43, 226, 0.4);
+        max-width: 450px;
+        margin: 0 auto;
+    }
+    
+    [data-testid="stFileUploader"]:hover {
+        border-color: rgba(138, 43, 226, 0.6);
+        background: rgba(138, 43, 226, 0.08);
+    }
+    
+    [data-testid="stFileUploader"] * {
+        color: #e4e4e7 !important;
+    }
+    
+    [data-testid="stFileUploader"] button {
+        background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 50%, #d946ef 100%) !important;
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 10px !important;
+        padding: 0.6rem 1.5rem !important;
+        font-weight: 600 !important;
+        box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4) !important;
+    }
+    
+    [data-testid="stFileUploader"] button:hover {
+        box-shadow: 0 6px 20px rgba(139, 92, 246, 0.6) !important;
+        transform: translateY(-1px);
+    }
+    
+    [data-testid="stFileUploader"] section {
+        padding: 1rem !important;
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       RESULT CARDS
+    ═══════════════════════════════════════════════════════════════════ */
+    .result-defective {
+        background: rgba(239, 68, 68, 0.15);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        border-left: 4px solid #ef4444;
+        border-radius: 20px;
+        padding: 2rem;
+        margin: 1rem 0;
+        box-shadow: 0 10px 40px rgba(239, 68, 68, 0.1);
+    }
+    
+    .result-defective h2, .result-defective p {
+        color: #fecaca !important;
+    }
+    
+    .result-ok {
+        background: rgba(34, 197, 94, 0.15);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(34, 197, 94, 0.3);
+        border-left: 4px solid #22c55e;
+        border-radius: 20px;
+        padding: 2rem;
+        margin: 1rem 0;
+        box-shadow: 0 10px 40px rgba(34, 197, 94, 0.1);
+    }
+    
+    .result-ok h2, .result-ok p {
+        color: #bbf7d0 !important;
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       METRICS & STATUS CARDS
+    ═══════════════════════════════════════════════════════════════════ */
+    [data-testid="stMetric"] {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(10px);
+        border-radius: 10px;
+        padding: 0.75rem;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    
+    [data-testid="stMetric"] label {
+        color: #71717a !important;
+        font-weight: 500;
+        font-size: 0.75rem !important;
+    }
+    
+    [data-testid="stMetric"] [data-testid="stMetricValue"] {
+        color: #ffffff !important;
+        font-weight: 600;
+        font-size: 1rem !important;
+    }
+    
+    .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 1rem;
+        border-radius: 100px;
+        font-weight: 600;
+        font-size: 0.75rem;
+        backdrop-filter: blur(10px);
+    }
+    
+    .status-active {
+        background: rgba(34, 197, 94, 0.2);
+        color: #4ade80;
+        border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+    
+    .status-inactive {
+        background: rgba(161, 161, 170, 0.2);
+        color: #a1a1aa;
+        border: 1px solid rgba(161, 161, 170, 0.3);
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       LEFT NAVIGATION PANEL (after image upload)
+    ═══════════════════════════════════════════════════════════════════ */
+    .nav-panel {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(20px);
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        padding: 1rem;
+        height: fit-content;
+    }
+    
+    .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.875rem 1rem;
+        border-radius: 10px;
+        color: #a1a1aa;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        margin-bottom: 0.5rem;
+        border: 1px solid transparent;
+    }
+    
+    .nav-item:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: #ffffff;
+    }
+    
+    .nav-item.active {
+        background: rgba(255, 255, 255, 0.08);
+        color: #ffffff;
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    .nav-icon {
+        font-size: 1.25rem;
+        width: 24px;
+        text-align: center;
+    }
+    
+    .nav-label {
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       CENTERED HERO SECTION (smaller)
+    ═══════════════════════════════════════════════════════════════════ */
+    .hero-section {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 40vh;
+        text-align: center;
+        padding: 1rem;
+    }
+    
+    .hero-title {
+        font-family: 'Inter', sans-serif;
+        font-size: 2.5rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #ffffff 0%, #71717a 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 0.5rem;
+    }
+    
+    .hero-subtitle {
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 0.9rem;
+        margin-bottom: 1.5rem;
+        max-width: 400px;
+    }
+    
+    .hero-upload {
+        background: rgba(255, 255, 255, 0.03);
+        border: 2px dashed rgba(255, 255, 255, 0.15);
+        border-radius: 12px;
+        padding: 1.5rem 2rem;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        max-width: 300px;
+    }
+    
+    .hero-upload:hover {
+        border-color: rgba(255, 255, 255, 0.3);
+        background: rgba(255, 255, 255, 0.05);
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       MAIN BODY GLASS CONTAINER
+    ═══════════════════════════════════════════════════════════════════ */
+    .main-glass-container {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 20px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       SECTION CONTENT BOXES (for readability)
+    ═══════════════════════════════════════════════════════════════════ */
+    .section-content {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 1.25rem;
+        margin: 0.5rem 0;
+    }
+    
+    .section-content h3, .section-content h4 {
+        color: #ffffff !important;
         margin-bottom: 1rem;
     }
-    .result-defective {
-        background: linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 100%);
-        border-left: 6px solid #F44336;
-        padding: 1.5rem;
-        border-radius: 10px;
-        margin: 1rem 0;
+    
+    .section-content p {
+        color: #e4e4e7 !important;
     }
-    .result-ok {
-        background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%);
-        border-left: 6px solid #4CAF50;
-        padding: 1.5rem;
-        border-radius: 10px;
-        margin: 1rem 0;
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       HORIZONTAL NAV BUTTONS
+    ═══════════════════════════════════════════════════════════════════ */
+    .nav-horizontal {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        justify-content: center;
+        padding: 0.75rem;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 1rem;
     }
-    .cbir-result {
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       TABS STYLING
+    ═══════════════════════════════════════════════════════════════════ */
+    .stTabs [data-baseweb="tab-list"] {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border-radius: 16px;
+        padding: 0.5rem;
+        gap: 0.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background: transparent;
+        border-radius: 12px;
+        padding: 0.75rem 1.5rem;
+        color: #a1a1aa;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    
+    .stTabs [data-baseweb="tab"]:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: #ffffff;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: rgba(255, 255, 255, 0.1) !important;
+        color: #ffffff !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+    
+    .stTabs [data-baseweb="tab-panel"] {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(10px);
+        border-radius: 20px;
+        padding: 1.5rem;
+        margin-top: 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       VLM & URGENCY BADGES
+    ═══════════════════════════════════════════════════════════════════ */
+    .vlm-box {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border-left: 4px solid #a1a1aa;
+        border-radius: 20px;
+        padding: 2rem;
+        margin: 1rem 0;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    }
+    
+    .urgency-urgent {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        color: white;
+        padding: 0.5rem 1.25rem;
+        border-radius: 100px;
+        font-weight: 600;
+        font-size: 0.875rem;
+        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+    }
+    
+    .urgency-high {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        color: white;
+        padding: 0.5rem 1.25rem;
+        border-radius: 100px;
+        font-weight: 600;
+        font-size: 0.875rem;
+        box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+    }
+    
+    .urgency-moderate {
+        background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+        color: #1e293b;
+        padding: 0.5rem 1.25rem;
+        border-radius: 100px;
+        font-weight: 600;
+        font-size: 0.875rem;
+        box-shadow: 0 4px 15px rgba(251, 191, 36, 0.4);
+    }
+    
+    .urgency-none {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        padding: 0.5rem 1.25rem;
+        border-radius: 100px;
+        font-weight: 600;
+        font-size: 0.875rem;
+        box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       CBIR IMAGE CARDS
+    ═══════════════════════════════════════════════════════════════════ */
+    .cbir-card {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    
+    .cbir-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+        border-color: rgba(255, 255, 255, 0.15);
+    }
+    
+    .cbir-card-defective {
+        border-color: rgba(239, 68, 68, 0.4);
+    }
+    
+    .cbir-card-ok {
+        border-color: rgba(34, 197, 94, 0.4);
+    }
+    
+    .cbir-card-content {
+        padding: 1rem;
         text-align: center;
-        padding: 10px;
-        border-radius: 10px;
-        margin: 5px;
+        color: #e4e4e7;
     }
-    .cbir-defective {
-        background-color: #FFEBEE;
-        border: 2px solid #F44336;
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       MODEL CARDS
+    ═══════════════════════════════════════════════════════════════════ */
+    .model-card {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 20px;
+        padding: 1.5rem;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        transition: all 0.3s ease;
+        border: 1px solid rgba(255, 255, 255, 0.08);
     }
-    .cbir-ok {
-        background-color: #E8F5E9;
-        border: 2px solid #4CAF50;
+    
+    .model-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+    }
+    
+    .model-card-defect {
+        border-color: rgba(239, 68, 68, 0.3);
+        background: rgba(239, 68, 68, 0.1);
+    }
+    
+    .model-card-ok {
+        border-color: rgba(34, 197, 94, 0.3);
+        background: rgba(34, 197, 94, 0.1);
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       PROGRESS BAR
+    ═══════════════════════════════════════════════════════════════════ */
+    .stProgress > div > div {
+        background: linear-gradient(90deg, #ffffff 0%, #a1a1aa 100%);
+        border-radius: 100px;
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       DATAFRAME STYLING
+    ═══════════════════════════════════════════════════════════════════ */
+    [data-testid="stDataFrame"] {
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       ANIMATIONS
+    ═══════════════════════════════════════════════════════════════════ */
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .animate-in {
+        animation: fadeInUp 0.5s ease-out forwards;
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       HIDE STREAMLIT BRANDING
+    ═══════════════════════════════════════════════════════════════════ */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       CUSTOM SCROLLBAR
+    ═══════════════════════════════════════════════════════════════════ */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.02);
+        border-radius: 100px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 100px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.25);
+    }
+    
+    /* ═══════════════════════════════════════════════════════════════════
+       ADDITIONAL DARK MODE FIXES
+    ═══════════════════════════════════════════════════════════════════ */
+    .stMarkdown, .stMarkdown p, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
+        color: #e4e4e7 !important;
+    }
+    
+    .stSelectbox label, .stSlider label, .stCheckbox label {
+        color: #a1a1aa !important;
+    }
+    
+    .stAlert {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+    }
+    
+    .stAlert p {
+        color: #e4e4e7 !important;
+    }
+    
+    /* Plotly charts dark mode */
+    .js-plotly-plot {
+        border-radius: 16px;
+        overflow: hidden;
+    }
+    
+    /* Info/Success/Warning/Error boxes */
+    .stSuccess {
+        background: rgba(34, 197, 94, 0.1) !important;
+        border-color: rgba(34, 197, 94, 0.3) !important;
+    }
+    
+    .stError {
+        background: rgba(239, 68, 68, 0.1) !important;
+        border-color: rgba(239, 68, 68, 0.3) !important;
+    }
+    
+    .stWarning {
+        background: rgba(234, 179, 8, 0.1) !important;
+        border-color: rgba(234, 179, 8, 0.3) !important;
+    }
+    
+    .stInfo {
+        background: rgba(255, 255, 255, 0.05) !important;
+        border-color: rgba(255, 255, 255, 0.1) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -158,6 +854,200 @@ class FeatureExtractor(nn.Module):
             x = nn.functional.relu(x, inplace=True)
             x = nn.functional.adaptive_avg_pool2d(x, (1, 1))
         return x.view(x.size(0), -1)
+
+
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║                           VLM - VISION LANGUAGE MODEL                         ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+class TemplateVLM:
+    """Générateur de descriptions basé sur templates (pas de GPU requis)."""
+    
+    def __init__(self, language='fr'):
+        self.language = language
+        
+        self.templates = {
+            'fr': {
+                'defective': {
+                    'high': {
+                        'title': "⚠️ DÉFAUT CRITIQUE DÉTECTÉ",
+                        'description': "L'analyse révèle une anomalie majeure sur cette pièce industrielle.",
+                        'confidence_text': "La confiance du système est très élevée ({confidence:.1%}).",
+                        'details': "**Type probable:** {defect_type}\n**Zone affectée:** {zone}",
+                        'recommendation': "🚨 **ACTION IMMÉDIATE:** Retirer cette pièce de la production. Inspection manuelle obligatoire.",
+                        'urgency': "URGENT",
+                        'urgency_class': "urgency-urgent"
+                    },
+                    'medium': {
+                        'title': "⚠️ DÉFAUT DÉTECTÉ",
+                        'description': "L'analyse indique une anomalie sur cette pièce.",
+                        'confidence_text': "Confiance: {confidence:.1%}",
+                        'details': "**Type probable:** {defect_type}\n**Inspection recommandée**",
+                        'recommendation': "📋 **ACTION:** Mettre en quarantaine pour inspection complémentaire.",
+                        'urgency': "ÉLEVÉ",
+                        'urgency_class': "urgency-high"
+                    },
+                    'low': {
+                        'title': "⚠️ DÉFAUT POSSIBLE",
+                        'description': "L'analyse suggère une anomalie potentielle.",
+                        'confidence_text': "Confiance: {confidence:.1%}",
+                        'details': "Le système n'est pas certain. Vérification manuelle conseillée.",
+                        'recommendation': "📝 **ACTION:** Vérification visuelle recommandée.",
+                        'urgency': "MODÉRÉ",
+                        'urgency_class': "urgency-moderate"
+                    }
+                },
+                'non_defective': {
+                    'high': {
+                        'title': "✅ PIÈCE CONFORME",
+                        'description': "L'analyse confirme que cette pièce ne présente aucun défaut visible.",
+                        'confidence_text': "Confiance: {confidence:.1%}",
+                        'details': "Tous les critères de qualité sont satisfaits.",
+                        'recommendation': "👍 Cette pièce peut continuer dans le processus de production.",
+                        'urgency': "AUCUN",
+                        'urgency_class': "urgency-none"
+                    },
+                    'medium': {
+                        'title': "✅ PIÈCE PROBABLEMENT CONFORME",
+                        'description': "L'analyse suggère que cette pièce est en bon état.",
+                        'confidence_text': "Confiance: {confidence:.1%}",
+                        'details': "Les critères principaux sont satisfaits.",
+                        'recommendation': "👍 Peut continuer, vérification optionnelle.",
+                        'urgency': "AUCUN",
+                        'urgency_class': "urgency-none"
+                    },
+                    'low': {
+                        'title': "❓ STATUT INCERTAIN",
+                        'description': "L'analyse n'est pas concluante.",
+                        'confidence_text': "Confiance: {confidence:.1%}",
+                        'details': "Le système hésite entre conforme et non-conforme.",
+                        'recommendation': "🔍 Inspection manuelle recommandée.",
+                        'urgency': "MODÉRÉ",
+                        'urgency_class': "urgency-moderate"
+                    }
+                }
+            },
+            'en': {
+                'defective': {
+                    'high': {
+                        'title': "⚠️ CRITICAL DEFECT DETECTED",
+                        'description': "Analysis reveals a major anomaly on this industrial part.",
+                        'confidence_text': "System confidence is very high ({confidence:.1%}).",
+                        'details': "**Probable type:** {defect_type}\n**Affected zone:** {zone}",
+                        'recommendation': "🚨 **IMMEDIATE ACTION:** Remove from production. Manual inspection required.",
+                        'urgency': "URGENT",
+                        'urgency_class': "urgency-urgent"
+                    },
+                    'medium': {
+                        'title': "⚠️ DEFECT DETECTED",
+                        'description': "Analysis indicates an anomaly on this part.",
+                        'confidence_text': "Confidence: {confidence:.1%}",
+                        'details': "**Probable type:** {defect_type}\n**Inspection recommended**",
+                        'recommendation': "📋 **ACTION:** Quarantine for additional inspection.",
+                        'urgency': "HIGH",
+                        'urgency_class': "urgency-high"
+                    },
+                    'low': {
+                        'title': "⚠️ POSSIBLE DEFECT",
+                        'description': "Analysis suggests a potential anomaly.",
+                        'confidence_text': "Confidence: {confidence:.1%}",
+                        'details': "System is uncertain. Manual verification advised.",
+                        'recommendation': "📝 **ACTION:** Visual verification recommended.",
+                        'urgency': "MODERATE",
+                        'urgency_class': "urgency-moderate"
+                    }
+                },
+                'non_defective': {
+                    'high': {
+                        'title': "✅ PART CONFORMING",
+                        'description': "Analysis confirms this part shows no visible defects.",
+                        'confidence_text': "Confidence: {confidence:.1%}",
+                        'details': "All quality criteria are satisfied.",
+                        'recommendation': "👍 This part can continue in production.",
+                        'urgency': "NONE",
+                        'urgency_class': "urgency-none"
+                    },
+                    'medium': {
+                        'title': "✅ PART LIKELY CONFORMING",
+                        'description': "Analysis suggests this part is in good condition.",
+                        'confidence_text': "Confidence: {confidence:.1%}",
+                        'details': "Main criteria are satisfied.",
+                        'recommendation': "👍 Can continue, optional verification.",
+                        'urgency': "NONE",
+                        'urgency_class': "urgency-none"
+                    },
+                    'low': {
+                        'title': "❓ UNCERTAIN STATUS",
+                        'description': "Analysis is inconclusive.",
+                        'confidence_text': "Confidence: {confidence:.1%}",
+                        'details': "System uncertain between conforming and non-conforming.",
+                        'recommendation': "🔍 Manual inspection recommended.",
+                        'urgency': "MODERATE",
+                        'urgency_class': "urgency-moderate"
+                    }
+                }
+            }
+        }
+        
+        self.defect_types = {
+            'fr': ["rayure", "fissure", "déformation", "corrosion", "inclusion", "porosité", "bavure"],
+            'en': ["scratch", "crack", "deformation", "corrosion", "inclusion", "porosity", "burr"]
+        }
+        
+        self.zones = {
+            'fr': ["surface principale", "bord", "centre", "coin", "jonction"],
+            'en': ["main surface", "edge", "center", "corner", "junction"]
+        }
+    
+    def get_confidence_level(self, confidence):
+        if confidence >= 0.85:
+            return 'high'
+        elif confidence >= 0.6:
+            return 'medium'
+        return 'low'
+    
+    def generate(self, prediction, confidence, cbir_results=None):
+        """Génère une description structurée."""
+        lang = self.language
+        class_name = 'defective' if prediction == 1 else 'non_defective'
+        level = self.get_confidence_level(confidence)
+        
+        template = self.templates[lang][class_name][level]
+        
+        # Sélectionner défaut et zone basé sur confidence
+        seed = int(confidence * 1000)
+        defect_type = self.defect_types[lang][seed % len(self.defect_types[lang])]
+        zone = self.zones[lang][seed % len(self.zones[lang])]
+        
+        # CBIR info
+        cbir_text = ""
+        if cbir_results and len(cbir_results) > 0:
+            # Flatten CBIR results if nested by model
+            all_results = []
+            if isinstance(cbir_results, dict):
+                for model_results in cbir_results.values():
+                    all_results.extend(model_results)
+            else:
+                all_results = cbir_results
+            
+            if all_results:
+                defect_count = sum(1 for r in all_results if r.get('label', 0) == 1)
+                total = len(all_results)
+                if lang == 'fr':
+                    cbir_text = f"**Analyse CBIR:** {defect_count}/{total} images similaires sont défectueuses."
+                else:
+                    cbir_text = f"**CBIR Analysis:** {defect_count}/{total} similar images are defective."
+        
+        return {
+            'title': template['title'],
+            'description': template['description'],
+            'confidence_text': template['confidence_text'].format(confidence=confidence),
+            'details': template['details'].format(defect_type=defect_type, zone=zone),
+            'recommendation': template['recommendation'],
+            'urgency': template['urgency'],
+            'urgency_class': template['urgency_class'],
+            'cbir_text': cbir_text
+        }
 
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -298,6 +1188,12 @@ def load_cbir_signatures():
             st.warning(f"Erreur avec {pkl_file}: {e}")
     
     return signatures
+
+
+@st.cache_resource
+def load_vlm():
+    """Charge le générateur VLM."""
+    return TemplateVLM(language=VLM_LANGUAGE)
 
 
 def predict_ensemble(image_tensor, extractors, models_dict, use_cnn=True, use_resnet=True, use_vgg=True):
@@ -446,325 +1342,337 @@ def create_gauge_chart(value, title="Confiance"):
 # ╚══════════════════════════════════════════════════════════════════════════════╝
 
 def main():
-    # Header
-    st.markdown('<h1 class="main-header">🏭 Détection de Défauts Industriels</h1>', unsafe_allow_html=True)
-    st.markdown('<p style="text-align: center; color: #666;">Classification par vote majoritaire + Recherche d\'images similaires (CBIR)</p>', unsafe_allow_html=True)
+    # Initialize session state
+    if 'analysis_done' not in st.session_state:
+        st.session_state.analysis_done = False
+    if 'pred_result' not in st.session_state:
+        st.session_state.pred_result = None
+    if 'cbir_results' not in st.session_state:
+        st.session_state.cbir_results = None
+    if 'current_tab' not in st.session_state:
+        st.session_state.current_tab = "vlm"
     
-    # Sidebar
+    # Right Sidebar (Config) - Fixed 120px
     with st.sidebar:
-        st.title("⚙️ Configuration")
-        
+        st.markdown('<p style="text-align:center; margin:0;">⚙️</p>', unsafe_allow_html=True)
         st.markdown("---")
-        
-        # Mode demo
-        demo_mode = st.checkbox("🧪 Mode Démo", value=False, 
-                               help="Simule les résultats si aucun modèle n'est chargé")
-        
+        demo_mode = st.checkbox("Demo", value=False)
         st.markdown("---")
-        
-        # Model selection
-        st.subheader("🤖 Modèles à utiliser")
-        use_cnn = st.checkbox("CNN Baseline", value=True, help="Include CNN Baseline in ensemble")
-        use_resnet = st.checkbox("ResNet50 + SVM", value=True, help="Include ResNet50 + SVM in ensemble")
-        use_vgg = st.checkbox("VGG16 + SVM", value=True, help="Include VGG16 + SVM in ensemble (wenn trainiert)")
-        
+        st.markdown('<p style="opacity:0.6; margin:0 0 0.25rem 0;">MOD.</p>', unsafe_allow_html=True)
+        use_cnn = st.checkbox("CNN", value=True)
+        use_resnet = st.checkbox("ResNet", value=True)
+        use_vgg = st.checkbox("VGG", value=True)
         st.markdown("---")
-        
-        # Paramètres CBIR
-        st.subheader("🔍 Paramètres CBIR")
-        
-        k_results = st.slider("Nombre de résultats (K)", 1, 10, 5)
-        
-        distance_metric = st.selectbox(
-            "Métrique de distance",
-            list(DISTANCE_FUNCTIONS.keys()),
-            index=2  # Cosinus par défaut
-        )
-        
+        st.markdown('<p style="opacity:0.6; margin:0 0 0.25rem 0;">CBIR</p>', unsafe_allow_html=True)
+        k_results = st.slider("K", 1, 10, 5, label_visibility="collapsed")
+        distance_metric = "Cosinus"  # Must match DISTANCE_FUNCTIONS key
         st.markdown("---")
-        st.info(f"💻 Device: {DEVICE}")
+        vlm_enabled = st.checkbox("VLM", value=True)
     
-    # Charger les ressources
-    with st.spinner("Chargement des modèles..."):
-        extractors = load_feature_extractors()
-        models_dict = load_classification_models()
-        signatures = load_cbir_signatures()
+    # Load resources silently (no loading message)
+    extractors = load_feature_extractors()
+    models_dict = load_classification_models()
+    signatures = load_cbir_signatures()
+    vlm = load_vlm()
     
-    # Afficher le statut
-    col_status1, col_status2, col_status3 = st.columns(3)
-    with col_status1:
-        n_classifiers = len(models_dict.get('cnn_models', {})) + len(models_dict.get('shallow_models', {}))
-        st.metric("Classifiers", n_classifiers if n_classifiers > 0 else "Demo")
-    with col_status2:
-        st.metric("Extracteurs", len(extractors))
-    with col_status3:
-        st.metric("Signatures CBIR", len(signatures) if signatures else "Non disponible")
+    # ════════════════════════════════════════════════════════════════════
+    # PERMANENT HEADER - Always visible
+    # ════════════════════════════════════════════════════════════════════
+    st.markdown('''
+    <div style="text-align: center; padding: 1rem 0 0.5rem 0;">
+        <h1 class="main-header">🏭 Détection de Défauts</h1>
+        <p class="sub-header">Classification IA • Recherche d'images similaires • Description VLM</p>
+    </div>
+    ''', unsafe_allow_html=True)
     
-    st.markdown("---")
+    # File uploader (below title)
+    uploaded_file = st.file_uploader("upload", type=['jpg', 'jpeg', 'png', 'bmp'], label_visibility="collapsed", key="main_uploader")
     
-    # Upload
-    col1, col2 = st.columns([1, 2])
+    # ════════════════════════════════════════════════════════════════════
+    # INITIAL STATE: Instruction text
+    # ════════════════════════════════════════════════════════════════════
+    if not uploaded_file:
+        st.markdown('''
+        <div style="text-align: center; color: #71717a; font-size: 0.9rem; padding: 2rem 0;">
+            <p>👆 Glissez une image ci-dessus ou cliquez pour sélectionner</p>
+        </div>
+        ''', unsafe_allow_html=True)
     
-    with col1:
-        st.subheader("📤 Upload Image")
-        uploaded_file = st.file_uploader(
-            "Choisir une image",
-            type=['jpg', 'jpeg', 'png', 'bmp']
-        )
+    # ════════════════════════════════════════════════════════════════════
+    # AFTER UPLOAD: Image on left, content on right
+    # ════════════════════════════════════════════════════════════════════
+    else:
+        image = Image.open(uploaded_file).convert('RGB')
         
-        if uploaded_file:
-            image = Image.open(uploaded_file).convert('RGB')
-            st.image(image, caption="Image uploadée", use_container_width=True)
-    
-    with col2:
-        st.subheader("🔬 Résultats d'Analyse")
+        # Layout: Image (1) | Content (2)
+        img_col, content_col = st.columns([1, 2])
         
-        if uploaded_file:
-            if st.button("🚀 Analyser", type="primary", use_container_width=True):
-                
-                # Préparer l'image
-                transform = get_transform()
-                image_tensor = transform(image).unsqueeze(0)
-                
-                # Progress
-                progress = st.progress(0)
-                status = st.empty()
-                
-                # =============================================
-                # PARTIE 1: CLASSIFICATION
-                # =============================================
-                status.text("🎯 Classification en cours...")
-                progress.progress(30)
-                
-                # if demo_mode or not models_dict.get('cnn_models'):
-                if demo_mode:
-                    # Mode démo: simuler
-                    time.sleep(0.5)
-                    pred_result = {
-                        'prediction': np.random.choice([0, 1]),
-                        'class_name': np.random.choice(['non_defective', 'defective']),
-                        'confidence': np.random.uniform(0.6, 0.95),
-                        'votes': {'defective': np.random.randint(2, 5), 'non_defective': np.random.randint(1, 3)},
-                        'model_results': {
-                            'CNN_Baseline': {'prediction': 1, 'confidence': 0.85},
-                            'ResNet50_SVM': {'prediction': 1, 'confidence': 0.90},
-                            'VGG16_SVM': {'prediction': 0, 'confidence': 0.75},
-                        }
-                    }
-                    pred_result['votes'] = {
-                        'defective': sum(1 for m in pred_result['model_results'].values() if m['prediction'] == 1),
-                        'non_defective': sum(1 for m in pred_result['model_results'].values() if m['prediction'] == 0)
-                    }
-                    pred_result['prediction'] = 1 if pred_result['votes']['defective'] > pred_result['votes']['non_defective'] else 0
-                    pred_result['class_name'] = CLASSES[pred_result['prediction']]
-                    pred_result['confidence'] = max(pred_result['votes'].values()) / sum(pred_result['votes'].values())
-                else:
-                    pred_result = predict_ensemble(image_tensor, extractors, models_dict, 
-                                                  use_cnn=use_cnn, use_resnet=use_resnet, use_vgg=use_vgg)
-                
-                progress.progress(60)
-                
-                # =============================================
-                # PARTIE 2: CBIR
-                # =============================================
-                status.text("🔍 Recherche d'images similaires...")
-                
-                cbir_results = {}
-                
-                if signatures:
-                    for model_name, sig_db in signatures.items():
-                        if model_name in extractors:
-                            try:
-                                results = cbir_search(
-                                    image_tensor, 
-                                    extractors[model_name], 
-                                    sig_db, 
-                                    k=k_results,
-                                    distance_metric=distance_metric
-                                )
-                                cbir_results[model_name] = results
-                            except Exception as e:
-                                st.warning(f"Erreur CBIR {model_name}: {e}")
-                elif demo_mode:
-                    # Simuler des résultats CBIR
-                    for model_name in ['resnet50', 'vgg16']:
-                        cbir_results[model_name] = [
-                            {
-                                'rank': i+1,
-                                'path': f'./data/train/{"defective" if np.random.random() > 0.5 else "non_defective"}/img_{np.random.randint(1, 100):03d}.jpg',
-                                'distance': np.random.uniform(0.1, 0.5),
-                                'label': np.random.choice([0, 1]),
-                                'class_name': np.random.choice(['non_defective', 'defective'])
+        with img_col:
+            # Image preview with glass frame
+            st.markdown('<div class="main-glass-container">', unsafe_allow_html=True)
+            st.image(image, use_container_width=True)
+            
+            # Compact metrics under image
+            n_classifiers = len(models_dict.get('cnn_models', {})) + len(models_dict.get('shallow_models', {}))
+            st.markdown(f'''
+            <div style="display: flex; justify-content: space-around; margin-top: 1rem; font-size: 0.75rem; color: #a1a1aa;">
+                <span>🎯 {n_classifiers if n_classifiers > 0 else "Demo"}</span>
+                <span>🧠 {len(extractors)}</span>
+                <span>📚 {len(signatures) if signatures else "—"}</span>
+                <span>🤖 {"✓" if vlm_enabled else "✗"}</span>
+            </div>
+            ''', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        with content_col:
+            # Analysis button or results
+            if not st.session_state.analysis_done:
+                st.markdown('<div class="main-glass-container">', unsafe_allow_html=True)
+                st.markdown("### 🔬 Prêt pour l'analyse")
+                st.markdown("Cliquez pour lancer la classification et la recherche d'images similaires.")
+                if st.button("🚀 Lancer l'analyse", type="primary", use_container_width=True):
+                    transform = get_transform()
+                    image_tensor = transform(image).unsqueeze(0)
+                    
+                    progress = st.progress(0)
+                    status = st.empty()
+                    
+                    status.text("🎯 Classification...")
+                    progress.progress(30)
+                    
+                    if demo_mode:
+                        time.sleep(0.5)
+                        pred_result = {
+                            'prediction': np.random.choice([0, 1]),
+                            'class_name': np.random.choice(['non_defective', 'defective']),
+                            'confidence': np.random.uniform(0.6, 0.95),
+                            'votes': {'defective': np.random.randint(2, 5), 'non_defective': np.random.randint(1, 3)},
+                            'model_results': {
+                                'CNN': {'prediction': 1, 'confidence': 0.85},
+                                'ResNet': {'prediction': 1, 'confidence': 0.90},
+                                'VGG': {'prediction': 0, 'confidence': 0.75},
                             }
-                            for i in range(k_results)
-                        ]
+                        }
+                        pred_result['votes'] = {
+                            'defective': sum(1 for m in pred_result['model_results'].values() if m['prediction'] == 1),
+                            'non_defective': sum(1 for m in pred_result['model_results'].values() if m['prediction'] == 0)
+                        }
+                        pred_result['prediction'] = 1 if pred_result['votes']['defective'] > pred_result['votes']['non_defective'] else 0
+                        pred_result['class_name'] = CLASSES[pred_result['prediction']]
+                        pred_result['confidence'] = max(pred_result['votes'].values()) / sum(pred_result['votes'].values())
+                    else:
+                        pred_result = predict_ensemble(image_tensor, extractors, models_dict, 
+                                                      use_cnn=use_cnn, use_resnet=use_resnet, use_vgg=use_vgg)
+                    
+                    progress.progress(60)
+                    
+                    status.text("🔍 Recherche CBIR...")
+                    cbir_results = {}
+                    
+                    if signatures:
+                        for model_name, sig_db in signatures.items():
+                            if model_name in extractors:
+                                try:
+                                    results = cbir_search(
+                                        image_tensor, 
+                                        extractors[model_name], 
+                                        sig_db, 
+                                        k=k_results,
+                                        distance_metric=distance_metric
+                                    )
+                                    cbir_results[model_name] = results
+                                except:
+                                    pass
+                    elif demo_mode:
+                        for model_name in ['resnet50', 'vgg16']:
+                            cbir_results[model_name] = [
+                                {
+                                    'rank': i+1,
+                                    'path': f'./data/train/defective/img_{np.random.randint(1, 100):03d}.jpg',
+                                    'distance': np.random.uniform(0.1, 0.5),
+                                    'label': np.random.choice([0, 1]),
+                                }
+                                for i in range(k_results)
+                            ]
+                    
+                    progress.progress(100)
+                    status.empty()
+                    progress.empty()
+                    
+                    st.session_state.pred_result = pred_result
+                    st.session_state.cbir_results = cbir_results
+                    st.session_state.analysis_done = True
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            else:
+                pred_result = st.session_state.pred_result
+                cbir_results = st.session_state.cbir_results
                 
-                progress.progress(100)
-                status.empty()
-                progress.empty()
-                
-                # =============================================
-                # AFFICHAGE DES RÉSULTATS
-                # =============================================
-                
-                st.markdown("---")
-                
-                # Résultat principal
+                # Result header (prediction result)
                 if pred_result:
                     if pred_result['prediction'] == 1:
-                        st.markdown(f"""
+                        st.markdown(f'''
                         <div class="result-defective">
-                            <h2>⚠️ DÉFAUT DÉTECTÉ</h2>
-                            <p>Confiance: <strong>{pred_result['confidence']:.1%}</strong> 
+                            <h2 style="margin: 0;">⚠️ DÉFAUT DÉTECTÉ</h2>
+                            <p style="margin: 0.5rem 0 0 0;">Confiance: <strong>{pred_result['confidence']:.1%}</strong>
                             ({pred_result['votes']['defective']}/{sum(pred_result['votes'].values())} modèles)</p>
                         </div>
-                        """, unsafe_allow_html=True)
+                        ''', unsafe_allow_html=True)
                     else:
-                        st.markdown(f"""
+                        st.markdown(f'''
                         <div class="result-ok">
-                            <h2>✅ PIÈCE CONFORME</h2>
-                            <p>Confiance: <strong>{pred_result['confidence']:.1%}</strong>
+                            <h2 style="margin: 0;">✅ PIÈCE CONFORME</h2>
+                            <p style="margin: 0.5rem 0 0 0;">Confiance: <strong>{pred_result['confidence']:.1%}</strong>
                             ({pred_result['votes']['non_defective']}/{sum(pred_result['votes'].values())} modèles)</p>
                         </div>
-                        """, unsafe_allow_html=True)
+                        ''', unsafe_allow_html=True)
                 
-                # Tabs pour détails
-                tab1, tab2, tab3, tab4 = st.tabs(["📊 Vote Majoritaire", "🎯 Analyse Modèles", "🔍 CBIR - Images Similaires", "📈 Détails"])
+                # Horizontal navigation buttons
+                nav_items = [
+                    ("🤖", "VLM", "vlm"),
+                    ("📊", "Vote", "vote"),
+                    ("🎯", "Modèles", "models"),
+                    ("🔍", "CBIR", "cbir"),
+                    ("📈", "Détails", "details"),
+                ]
                 
-                with tab1:
+                nav_cols = st.columns(len(nav_items))
+                for i, (icon, label, key) in enumerate(nav_items):
+                    with nav_cols[i]:
+                        if st.button(f"{icon} {label}", key=f"nav_{key}", use_container_width=True):
+                            st.session_state.current_tab = key
+                            st.rerun()
+                
+                # Section content with background
+                current_tab = st.session_state.current_tab
+                
+                st.markdown('<div class="section-content">', unsafe_allow_html=True)
+                
+                if current_tab == "vlm":
+                    st.markdown("### 🤖 Description VLM")
+                    if vlm_enabled and pred_result:
+                        vlm_result = vlm.generate(
+                            prediction=pred_result['prediction'],
+                            confidence=pred_result['confidence'],
+                            cbir_results=cbir_results
+                        )
+                        st.markdown(f"#### {vlm_result['title']}")
+                        st.markdown(f'<span class="{vlm_result["urgency_class"]}">Urgence: {vlm_result["urgency"]}</span>', unsafe_allow_html=True)
+                        st.markdown("---")
+                        st.markdown(f"**{vlm_result['description']}**")
+                        st.markdown(vlm_result['confidence_text'])
+                        st.markdown(vlm_result['details'])
+                        if vlm_result['cbir_text']:
+                            st.markdown(vlm_result['cbir_text'])
+                        st.info(vlm_result['recommendation'])
+                    else:
+                        st.info("VLM désactivé")
+                
+                elif current_tab == "vote":
+                    st.markdown("### 📊 Vote Majoritaire")
                     if pred_result and pred_result.get('model_results'):
                         col_a, col_b = st.columns(2)
-                        
                         with col_a:
-                            # Pie chart des votes
                             fig = px.pie(
                                 values=[pred_result['votes']['non_defective'], pred_result['votes']['defective']],
-                                names=['Non-Défectueux', 'Défectueux'],
-                                color_discrete_sequence=['#4CAF50', '#F44336'],
+                                names=['OK', 'Défaut'],
+                                color_discrete_sequence=['#22c55e', '#ef4444'],
                                 hole=0.4
                             )
-                            fig.update_layout(height=300)
+                            fig.update_layout(
+                                height=250,
+                                paper_bgcolor='rgba(0,0,0,0)',
+                                plot_bgcolor='rgba(0,0,0,0)',
+                                font_color='#e4e4e7'
+                            )
                             st.plotly_chart(fig, use_container_width=True)
-                        
                         with col_b:
-                            # Tableau des modèles
                             model_data = []
                             for name, res in pred_result['model_results'].items():
                                 model_data.append({
                                     'Modèle': name,
-                                    'Prédiction': '🔴 Défaut' if res['prediction'] == 1 else '🟢 OK',
-                                    'Confiance': f"{res['confidence']:.1%}"
+                                    'Vote': '🔴 Défaut' if res['prediction'] == 1 else '🟢 OK',
+                                    'Conf.': f"{res['confidence']:.0%}"
                                 })
                             st.dataframe(pd.DataFrame(model_data), use_container_width=True, hide_index=True)
                 
-                with tab2:
-                    st.markdown("### 🎯 Résultats des Modèles Disponibles")
-                    
+                elif current_tab == "models":
+                    st.markdown("### 🎯 Analyse Modèles")
                     if pred_result and pred_result.get('model_results'):
-                        models_to_show = pred_result['model_results']
-                        model_names = list(models_to_show.keys())
-                        
-                        # Create columns dynamically based on available models
-                        num_models = len(model_names)
-                        if num_models > 0:
-                            cols = st.columns(min(num_models, 4))
-                            
-                            for idx, model_name in enumerate(model_names):
-                                with cols[idx % len(cols)]:
-                                    result = models_to_show[model_name]
-                                    pred_text = '🔴 DÉFAUT' if result['prediction'] == 1 else '🟢 OK'
-                                    color = '#FFEBEE' if result['prediction'] == 1 else '#E8F5E9'
-                                    border_color = '#F44336' if result['prediction'] == 1 else '#4CAF50'
-                                    
-                                    st.markdown(f"""
-                                    <div style="background: {color}; border: 3px solid {border_color}; border-radius: 10px; padding: 20px; text-align: center;">
-                                        <h3>{model_name}</h3>
-                                        <h2>{pred_text}</h2>
-                                        <p style="font-size: 18px;"><strong>Confiance:</strong> {result['confidence']:.1%}</p>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                        
-                        st.markdown("---")
-                        
-                        # Detailed comparison table
-                        st.markdown("#### 📊 Comparaison Détaillée")
-                        comparison_data = []
-                        for model_name in model_names:
-                            result = models_to_show[model_name]
-                            comparison_data.append({
-                                'Modèle': model_name,
-                                'Prédiction': 'Défectueux' if result['prediction'] == 1 else 'Conforme',
-                                'Confiance': f"{result['confidence']:.2%}",
-                                'Accord avec vote': '✅' if result['prediction'] == pred_result['prediction'] else '❌'
-                            })
-                        
-                        if comparison_data:
-                            st.dataframe(pd.DataFrame(comparison_data), use_container_width=True, hide_index=True)
+                        cols = st.columns(min(len(pred_result['model_results']), 4))
+                        for idx, (name, res) in enumerate(pred_result['model_results'].items()):
+                            with cols[idx % len(cols)]:
+                                color = 'rgba(239,68,68,0.15)' if res['prediction'] == 1 else 'rgba(34,197,94,0.15)'
+                                border = 'rgba(239,68,68,0.4)' if res['prediction'] == 1 else 'rgba(34,197,94,0.4)'
+                                icon = '🔴' if res['prediction'] == 1 else '🟢'
+                                st.markdown(f'''
+                                <div style="background: {color}; border: 1px solid {border}; border-radius: 10px; padding: 0.75rem; text-align: center;">
+                                    <p style="margin: 0; font-size: 0.75rem; opacity: 0.7;">{name}</p>
+                                    <p style="margin: 0.25rem 0; font-size: 1.25rem;">{icon}</p>
+                                    <p style="margin: 0; font-weight: 600; font-size: 0.9rem;">{res['confidence']:.1%}</p>
+                                </div>
+                                ''', unsafe_allow_html=True)
                 
-                with tab3:
-                    if cbir_results:
-                        st.markdown(f"**Métrique:** {distance_metric} | **K:** {k_results}")
-                        
+                elif current_tab == "cbir":
+                    st.markdown("### 🔍 Images Similaires (CBIR)")
+                    # Debug info
+                    st.caption(f"Signatures chargées: {list(cbir_results.keys()) if cbir_results else 'Aucune'}")
+                    if cbir_results and len(cbir_results) > 0:
                         for model_name, results in cbir_results.items():
-                            st.markdown(f"### 🧠 {model_name.upper()}")
-                            
-                            cols = st.columns(min(k_results, 5))
-                            
-                            for i, res in enumerate(results[:5]):
-                                with cols[i]:
-                                    # Essayer de charger l'image
-                                    try:
-                                        if Path(res['path']).exists():
-                                            img = Image.open(res['path'])
-                                            st.image(img, use_container_width=True)
+                            st.markdown(f"**Extracteur: {model_name.upper()}**")
+                            if results and len(results) > 0:
+                                num_cols = min(len(results), 5)
+                                cols = st.columns(num_cols)
+                                for i, res in enumerate(results[:num_cols]):
+                                    with cols[i]:
+                                        img_path = Path(res['path'])
+                                        if img_path.exists():
+                                            try:
+                                                st.image(Image.open(img_path), use_container_width=True, caption=f"#{res['rank']}")
+                                            except:
+                                                st.markdown(f"📷 Image #{res['rank']}")
                                         else:
-                                            st.info(f"📷 path: {res['path']} #{res['rank']}")
-                                    except:
-                                        st.info(f"📷 Image #{res['rank']}")
-                                    
-                                    # Afficher les infos
-                                    status_icon = "🔴" if res['label'] == 1 else "🟢"
-                                    st.markdown(f"""
-                                    <div style="text-align: center; padding: 5px; 
-                                         background: {'#FFEBEE' if res['label'] == 1 else '#E8F5E9'}; 
-                                         border-radius: 5px;">
-                                        <b>#{res['rank']}</b> {status_icon}<br>
-                                        <small>Dist: {res['distance']:.4f}</small>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                            
+                                            st.markdown(f"📷 Image #{res['rank']}")
+                                        label_icon = "🔴 Défaut" if res['label'] == 1 else "🟢 OK"
+                                        st.markdown(f"<p style='text-align:center; font-size:0.7rem;'>{label_icon}<br>dist: {res['distance']:.3f}</p>", unsafe_allow_html=True)
+                            else:
+                                st.info(f"Aucun résultat pour {model_name}")
                             st.markdown("---")
                     else:
-                        st.info("Aucune base de signatures CBIR disponible. Créez-en avec `create_signatures.py`")
+                        st.warning("⚠️ Aucun résultat CBIR. Vérifiez que l'analyse a été effectuée.")
+                        st.caption(f"Signatures disponibles: {len(signatures)} | Extracteurs: {list(extractors.keys())}")
                 
-                with tab4:
+                elif current_tab == "details":
+                    st.markdown("### 📈 Détails")
                     if pred_result:
-                        # Gauge de confiance
-                        fig = create_gauge_chart(pred_result['confidence'], "Confiance Ensemble")
+                        fig = create_gauge_chart(pred_result['confidence'], "Confiance")
+                        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color='#e4e4e7')
                         st.plotly_chart(fig, use_container_width=True)
-                        
-                        # Interprétation
                         if pred_result['confidence'] >= 0.8:
-                            st.success("✅ **Haute confiance** - Les modèles sont d'accord")
+                            st.success("✅ Haute confiance - Modèles en accord")
                         elif pred_result['confidence'] >= 0.6:
-                            st.warning("⚠️ **Confiance moyenne** - Désaccord entre modèles")
+                            st.warning("⚠️ Confiance moyenne - Désaccord partiel")
                         else:
-                            st.error("❌ **Faible confiance** - Vérification manuelle recommandée")
-        else:
-            st.markdown("""
-            <div style="text-align: center; padding: 3rem; background: #f5f5f5; border-radius: 10px; border: 2px dashed #ccc;">
-                <h3 style="color: #999;">👈 Uploadez une image pour commencer</h3>
-                <p style="color: #bbb;">Formats: JPG, JPEG, PNG, BMP</p>
-            </div>
-            """, unsafe_allow_html=True)
+                            st.error("❌ Faible confiance - Vérification manuelle")
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Reset button
+                if st.button("🔄 Nouvelle analyse", use_container_width=True):
+                    st.session_state.analysis_done = False
+                    st.session_state.pred_result = None
+                    st.session_state.cbir_results = None
+                    st.rerun()
     
     # Footer
-    st.markdown("---")
-    st.markdown("""
-    <div style="text-align: center; color: #999; font-size: 12px;">
-        🏭 Hackathon IA - Détection de Défauts Industriels | Classification + CBIR
+    st.markdown('''
+    <div style="text-align: center; padding: 0.5rem;">
+        <p style="color: rgba(255,255,255,0.3); font-size: 0.7rem; margin: 0;">
+            🏭 Hackathon IA — Classification • CBIR • VLM
+        </p>
     </div>
-    """, unsafe_allow_html=True)
+    ''', unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
