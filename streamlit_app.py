@@ -7,7 +7,7 @@ Application Streamlit pour:
 2. Recherche d'images similaires (CBIR)
 
 Usage:
-    streamlit run streamlit_app_complete.py
+    streamlit run streamlit_app.py
 
 Prérequis:
     pip install streamlit torch torchvision scikit-learn pillow plotly pandas scipy
@@ -234,7 +234,7 @@ def load_classification_models():
         return models_dict
     
     # CNN Baseline
-    cnn_path = MODELS_DIR / 'baseline_cnn.pth'
+    cnn_path = MODELS_DIR / 'cnn_baseline.pth'
     if cnn_path.exists():
         try:
             cnn = BaselineCNN()
@@ -247,13 +247,22 @@ def load_classification_models():
     
     # Shallow classifiers
     for pkl_file in MODELS_DIR.glob('*.pkl'):
-        if '_scaler' in pkl_file.stem:
-            # C'est un scaler
-            name = pkl_file.stem.replace('_scaler', '')
-            try:
-                models_dict['scalers'][name] = joblib.load(pkl_file)
-            except:
-                pass
+        if '_scaler' in pkl_file.stem or pkl_file.stem == 'scaler':
+            # C'est un scaler - handle both 'scaler.pkl' and '*_scaler.pkl'
+            if pkl_file.stem == 'scaler':
+                # Generic scaler, associate with all extractors
+                try:
+                    scaler = joblib.load(pkl_file)
+                    for ext_name in ['resnet50', 'vgg16', 'densenet121']:
+                        models_dict['scalers'][ext_name] = scaler
+                except:
+                    pass
+            else:
+                name = pkl_file.stem.replace('_scaler', '')
+                try:
+                    models_dict['scalers'][name] = joblib.load(pkl_file)
+                except:
+                    pass
         else:
             # C'est un classifier
             try:
@@ -291,26 +300,33 @@ def load_cbir_signatures():
     return signatures
 
 
-def predict_ensemble(image_tensor, extractors, models_dict):
+def predict_ensemble(image_tensor, extractors, models_dict, use_cnn=True, use_resnet=True, use_vgg=True):
     """Prédiction avec vote majoritaire."""
     predictions = {}
     
     # CNN predictions
-    for name, cnn in models_dict.get('cnn_models', {}).items():
-        try:
-            cnn.eval()
-            with torch.no_grad():
-                output = cnn(image_tensor.to(DEVICE))
-                probs = torch.softmax(output, dim=1)
-                pred = output.argmax(dim=1).item()
-                conf = probs[0][pred].item()
-            predictions[name] = {'prediction': pred, 'confidence': conf}
-        except:
-            pass
+    if use_cnn:
+        for name, cnn in models_dict.get('cnn_models', {}).items():
+            try:
+                cnn.eval()
+                with torch.no_grad():
+                    output = cnn(image_tensor.to(DEVICE))
+                    probs = torch.softmax(output, dim=1)
+                    pred = output.argmax(dim=1).item()
+                    conf = probs[0][pred].item()
+                predictions[name] = {'prediction': pred, 'confidence': conf}
+            except:
+                pass
     
     # Shallow predictions
     extracted_features = {}
     for name, info in models_dict.get('shallow_models', {}).items():
+        # Filter based on model selection
+        if not use_resnet and 'resnet' in name.lower():
+            continue
+        if not use_vgg and 'vgg' in name.lower():
+            continue
+        
         try:
             ext_name = info['extractor']
             
@@ -345,12 +361,23 @@ def predict_ensemble(image_tensor, extractors, models_dict):
     total = len(votes)
     
     final_pred = 1 if defective_votes > total / 2 else 0
-    confidence = max(defective_votes, total - defective_votes) / total
+    
+    # Weighted confidence: average confidence of models voting for final prediction
+    confidences_for_pred = [
+        p['confidence'] for p in predictions.values() 
+        if p['prediction'] == final_pred
+    ]
+    
+    if confidences_for_pred:
+        # Use weighted average: sum of (confidence * confidence) / sum of confidence
+        confidence_weights = sum(c * c for c in confidences_for_pred) / sum(confidences_for_pred)
+    else:
+        confidence_weights = 0.0
     
     return {
         'prediction': final_pred,
         'class_name': CLASSES[final_pred],
-        'confidence': confidence,
+        'confidence': confidence_weights,
         'votes': {'defective': defective_votes, 'non_defective': total - defective_votes},
         'model_results': predictions
     }
@@ -430,8 +457,16 @@ def main():
         st.markdown("---")
         
         # Mode demo
-        demo_mode = st.checkbox("🧪 Mode Démo", value=True, 
+        demo_mode = st.checkbox("🧪 Mode Démo", value=False, 
                                help="Simule les résultats si aucun modèle n'est chargé")
+        
+        st.markdown("---")
+        
+        # Model selection
+        st.subheader("🤖 Modèles à utiliser")
+        use_cnn = st.checkbox("CNN Baseline", value=True, help="Include CNN Baseline in ensemble")
+        use_resnet = st.checkbox("ResNet50 + SVM", value=True, help="Include ResNet50 + SVM in ensemble")
+        use_vgg = st.checkbox("VGG16 + SVM", value=True, help="Include VGG16 + SVM in ensemble (wenn trainiert)")
         
         st.markdown("---")
         
@@ -501,7 +536,8 @@ def main():
                 status.text("🎯 Classification en cours...")
                 progress.progress(30)
                 
-                if demo_mode or not models_dict.get('cnn_models'):
+                # if demo_mode or not models_dict.get('cnn_models'):
+                if demo_mode:
                     # Mode démo: simuler
                     time.sleep(0.5)
                     pred_result = {
@@ -512,7 +548,7 @@ def main():
                         'model_results': {
                             'CNN_Baseline': {'prediction': 1, 'confidence': 0.85},
                             'ResNet50_SVM': {'prediction': 1, 'confidence': 0.90},
-                            'VGG16_RF': {'prediction': 0, 'confidence': 0.75},
+                            'VGG16_SVM': {'prediction': 0, 'confidence': 0.75},
                         }
                     }
                     pred_result['votes'] = {
@@ -523,7 +559,8 @@ def main():
                     pred_result['class_name'] = CLASSES[pred_result['prediction']]
                     pred_result['confidence'] = max(pred_result['votes'].values()) / sum(pred_result['votes'].values())
                 else:
-                    pred_result = predict_ensemble(image_tensor, extractors, models_dict)
+                    pred_result = predict_ensemble(image_tensor, extractors, models_dict, 
+                                                  use_cnn=use_cnn, use_resnet=use_resnet, use_vgg=use_vgg)
                 
                 progress.progress(60)
                 
@@ -592,7 +629,7 @@ def main():
                         """, unsafe_allow_html=True)
                 
                 # Tabs pour détails
-                tab1, tab2, tab3 = st.tabs(["📊 Vote Majoritaire", "🔍 CBIR - Images Similaires", "📈 Détails"])
+                tab1, tab2, tab3, tab4 = st.tabs(["📊 Vote Majoritaire", "🎯 Analyse Modèles", "🔍 CBIR - Images Similaires", "📈 Détails"])
                 
                 with tab1:
                     if pred_result and pred_result.get('model_results'):
@@ -621,6 +658,50 @@ def main():
                             st.dataframe(pd.DataFrame(model_data), use_container_width=True, hide_index=True)
                 
                 with tab2:
+                    st.markdown("### 🎯 Résultats des Modèles Disponibles")
+                    
+                    if pred_result and pred_result.get('model_results'):
+                        models_to_show = pred_result['model_results']
+                        model_names = list(models_to_show.keys())
+                        
+                        # Create columns dynamically based on available models
+                        num_models = len(model_names)
+                        if num_models > 0:
+                            cols = st.columns(min(num_models, 4))
+                            
+                            for idx, model_name in enumerate(model_names):
+                                with cols[idx % len(cols)]:
+                                    result = models_to_show[model_name]
+                                    pred_text = '🔴 DÉFAUT' if result['prediction'] == 1 else '🟢 OK'
+                                    color = '#FFEBEE' if result['prediction'] == 1 else '#E8F5E9'
+                                    border_color = '#F44336' if result['prediction'] == 1 else '#4CAF50'
+                                    
+                                    st.markdown(f"""
+                                    <div style="background: {color}; border: 3px solid {border_color}; border-radius: 10px; padding: 20px; text-align: center;">
+                                        <h3>{model_name}</h3>
+                                        <h2>{pred_text}</h2>
+                                        <p style="font-size: 18px;"><strong>Confiance:</strong> {result['confidence']:.1%}</p>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                        
+                        st.markdown("---")
+                        
+                        # Detailed comparison table
+                        st.markdown("#### 📊 Comparaison Détaillée")
+                        comparison_data = []
+                        for model_name in model_names:
+                            result = models_to_show[model_name]
+                            comparison_data.append({
+                                'Modèle': model_name,
+                                'Prédiction': 'Défectueux' if result['prediction'] == 1 else 'Conforme',
+                                'Confiance': f"{result['confidence']:.2%}",
+                                'Accord avec vote': '✅' if result['prediction'] == pred_result['prediction'] else '❌'
+                            })
+                        
+                        if comparison_data:
+                            st.dataframe(pd.DataFrame(comparison_data), use_container_width=True, hide_index=True)
+                
+                with tab3:
                     if cbir_results:
                         st.markdown(f"**Métrique:** {distance_metric} | **K:** {k_results}")
                         
@@ -656,7 +737,7 @@ def main():
                     else:
                         st.info("Aucune base de signatures CBIR disponible. Créez-en avec `create_signatures.py`")
                 
-                with tab3:
+                with tab4:
                     if pred_result:
                         # Gauge de confiance
                         fig = create_gauge_chart(pred_result['confidence'], "Confiance Ensemble")
